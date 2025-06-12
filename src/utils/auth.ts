@@ -14,14 +14,15 @@ export interface User {
 }
 
 export async function verifyCredentials(username: string, password: string): Promise<DbUser | null> {
+  console.log('DEBUG: Attempting login for username:', username);
   const user = await getUserByUsername(username);
-  
+  console.log('DEBUG: User found:', !!user, user ? user.username : null);
   if (!user || !user.is_active) {
+    console.log('DEBUG: User not found or not active');
     return null;
   }
-  
   const isValidPassword = await bcrypt.compare(password, user.password);
-  
+  console.log('DEBUG: Password match:', isValidPassword);
   if (!isValidPassword) {
     return null;
   }

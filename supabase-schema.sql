@@ -43,5 +43,6 @@ CREATE INDEX idx_contacts_user_id ON contacts(user_id);
 
 -- Insert default admin user (password: Qq221122)
 -- Note: The password is already hashed with bcrypt
+-- To generate a new hash: SELECT crypt('your-password', gen_salt('bf'));
 INSERT INTO users (username, password, role)
-VALUES ('lirong', '$2a$10$YK.TqaI9ZK8oMvJxHKVoUOhE1xvz0VLPLcV9rD9zKQxKFXL8wKcYq', 'admin'); 
+VALUES ('lirong', '$2a$10$xLGz8Y7RTM9h3nYRNxvBOePpZCjcF3v5WqZ9lPQ8Kyt/7nIPHqfAK', 'admin'); 
