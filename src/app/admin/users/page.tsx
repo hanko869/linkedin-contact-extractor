@@ -6,9 +6,9 @@ interface User {
   id: string;
   username: string;
   role: 'admin' | 'user';
-  createdAt: string;
-  lastLogin?: string;
-  isActive: boolean;
+  created_at: string;
+  last_login?: string;
+  is_active: boolean;
 }
 
 export default function UsersManagement() {
@@ -23,7 +23,7 @@ export default function UsersManagement() {
     fetch('/api/admin/users')
       .then(res => res.json())
       .then(data => {
-        setUsers(data.users || []);
+        setUsers(Array.isArray(data) ? data : []);
         setLoading(false);
       })
       .catch(err => {
@@ -138,30 +138,30 @@ export default function UsersManagement() {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                    user.isActive 
+                    user.is_active 
                       ? 'bg-green-100 text-green-800' 
                       : 'bg-red-100 text-red-800'
                   }`}>
-                    {user.isActive ? 'Active' : 'Inactive'}
+                    {user.is_active ? 'Active' : 'Inactive'}
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {new Date(user.createdAt).toLocaleDateString()}
+                  {new Date(user.created_at).toLocaleDateString()}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {user.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'Never'}
+                  {user.last_login ? new Date(user.last_login).toLocaleString() : 'Never'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  {user.username !== 'admin' && (
+                  {user.username !== 'lirong' && (
                     <button
                       onClick={() => toggleUserStatus(user.id)}
                       className={`${
-                        user.isActive
+                        user.is_active
                           ? 'text-red-600 hover:text-red-900'
                           : 'text-green-600 hover:text-green-900'
                       }`}
                     >
-                      {user.isActive ? 'Deactivate' : 'Activate'}
+                      {user.is_active ? 'Deactivate' : 'Activate'}
                     </button>
                   )}
                 </td>

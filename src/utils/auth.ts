@@ -14,9 +14,9 @@ export interface User {
 }
 
 export async function verifyCredentials(username: string, password: string): Promise<DbUser | null> {
-  const user = getUserByUsername(username);
+  const user = await getUserByUsername(username);
   
-  if (!user || !user.isActive) {
+  if (!user || !user.is_active) {
     return null;
   }
   
@@ -27,11 +27,11 @@ export async function verifyCredentials(username: string, password: string): Pro
   }
   
   // Update last login
-  updateUserLastLogin(user.id);
+  await updateUserLastLogin(user.id);
   
   // Log login activity
-  logActivity({
-    userId: user.id,
+  await logActivity({
+    user_id: user.id,
     username: user.username,
     action: 'login',
     details: 'User logged in successfully'

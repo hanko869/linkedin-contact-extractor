@@ -1,39 +1,39 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getUser } from '@/utils/auth';
-import { toggleUserStatus } from '@/utils/userDb';
+import { toggleUserStatus, getUserById } from '@/utils/userDb';
 
 export async function POST(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  try {
-    const user = await getUser();
-    
-    if (!user || user.role !== 'admin') {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 403 }
-      );
-    }
+  const user = await getUser();
+  
+  if (!user || user.role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
-    const userId = params.id;
+  try {
+    const { id } = params;
     
     // Prevent admin from deactivating themselves
-    if (userId === user.id) {
+    if (user.id === id) {
       return NextResponse.json(
         { error: 'Cannot deactivate your own account' },
         { status: 400 }
       );
     }
 
-    toggleUserStatus(userId);
+    await toggleUserStatus(id);
+    const updatedUser = await getUserById(id);
     
-    return NextResponse.json({ success: true });
+    if (updatedUser) {
+      const { password, ...sanitizedUser } = updatedUser;
+      return NextResponse.json(sanitizedUser);
+    } else {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
   } catch (error) {
-    console.error('Toggle user status error:', error);
-    return NextResponse.json(
-      { error: 'Failed to toggle user status' },
-      { status: 500 }
-    );
+    console.error('Error toggling user status:', error);
+    return NextResponse.json({ error: 'Failed to update user status' }, { status: 500 });
   }
 } 

@@ -54,13 +54,31 @@ export async function POST(request: NextRequest) {
     // Use Wiza API for contact extraction
     const result = await extractContactWithWiza(linkedinUrl);
 
+    // Save to database if successful
+    if (result.success && result.contact) {
+      try {
+        const { saveExtractedContact } = await import('@/utils/userDb');
+        await saveExtractedContact(user.id, {
+          name: result.contact.name,
+          title: result.contact.jobTitle || '',
+          company: result.contact.company || '',
+          emails: result.contact.emails || (result.contact.email ? [result.contact.email] : []),
+          phones: result.contact.phones || (result.contact.phone ? [result.contact.phone] : []),
+          linkedin_url: linkedinUrl
+        });
+      } catch (saveError) {
+        console.error('Failed to save contact to database:', saveError);
+        // Continue - don't fail the request if saving fails
+      }
+    }
+
     // Log the extraction activity
-    logActivity({
-      userId: user.id,
+    await logActivity({
+      user_id: user.id,
       username: user.username,
       action: 'extract_contact',
-      linkedinUrl,
-      contactName: result.contact?.name,
+      linkedin_url: linkedinUrl,
+      contact_name: result.contact?.name,
       success: result.success,
       details: result.success 
         ? `Extracted ${result.contact?.name || 'contact'} from LinkedIn`

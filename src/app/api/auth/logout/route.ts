@@ -5,32 +5,26 @@ import { logActivity } from '@/utils/userDb';
 
 export async function POST() {
   try {
-    // Get current user before clearing the token
+    // Get current user before logout
     const user = await getUser();
     
     if (user) {
       // Log logout activity
-      logActivity({
-        userId: user.id,
+      await logActivity({
+        user_id: user.id,
         username: user.username,
         action: 'logout',
         details: 'User logged out'
       });
     }
     
+    // Clear the auth cookie
     const cookieStore = await cookies();
+    cookieStore.delete('auth-token');
     
-    cookieStore.set('auth-token', '', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 0, // Expire immediately
-      path: '/',
-    });
-
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Logout error:', error);
-    return NextResponse.json({ success: true }); // Still log out even if activity logging fails
+    return NextResponse.json({ success: true }); // Still logout even if logging fails
   }
 } 

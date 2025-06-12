@@ -4,43 +4,32 @@ import { getAllUsers, createUser } from '@/utils/userDb';
 
 // GET all users
 export async function GET() {
-  try {
-    const user = await getUser();
-    
-    if (!user || user.role !== 'admin') {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 403 }
-      );
-    }
+  const user = await getUser();
+  
+  if (!user || user.role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
-    const users = getAllUsers();
-    
-    // Remove passwords from response
-    const safeUsers = users.map(({ password, ...user }) => user);
-    
-    return NextResponse.json({ users: safeUsers });
+  try {
+    const users = await getAllUsers();
+    // Remove password from response
+    const sanitizedUsers = users.map(({ password, ...rest }) => rest);
+    return NextResponse.json(sanitizedUsers);
   } catch (error) {
-    console.error('Get users error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch users' },
-      { status: 500 }
-    );
+    console.error('Error fetching users:', error);
+    return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 });
   }
 }
 
 // POST create new user
 export async function POST(request: NextRequest) {
-  try {
-    const user = await getUser();
-    
-    if (!user || user.role !== 'admin') {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 403 }
-      );
-    }
+  const user = await getUser();
+  
+  if (!user || user.role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
+  try {
     const { username, password, role } = await request.json();
 
     if (!username || !password) {
@@ -50,39 +39,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (password.length < 6) {
-      return NextResponse.json(
-        { error: 'Password must be at least 6 characters' },
-        { status: 400 }
-      );
-    }
-
     if (role && !['admin', 'user'].includes(role)) {
       return NextResponse.json(
-        { error: 'Invalid role' },
+        { error: 'Invalid role. Must be either admin or user' },
         { status: 400 }
       );
     }
 
-    try {
-      const newUser = createUser(username, password, role || 'user');
-      const { password: _, ...safeUser } = newUser;
-      
-      return NextResponse.json({ user: safeUser });
-    } catch (err: any) {
-      if (err.message === 'Username already exists') {
-        return NextResponse.json(
-          { error: 'Username already exists' },
-          { status: 400 }
-        );
-      }
-      throw err;
+    const newUser = await createUser(username, password, role || 'user');
+    const { password: _, ...sanitizedUser } = newUser;
+    
+    return NextResponse.json(sanitizedUser, { status: 201 });
+  } catch (error: any) {
+    if (error.message === 'Username already exists') {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
-  } catch (error) {
-    console.error('Create user error:', error);
-    return NextResponse.json(
-      { error: 'Failed to create user' },
-      { status: 500 }
-    );
+    
+    console.error('Error creating user:', error);
+    return NextResponse.json({ error: 'Failed to create user' }, { status: 500 });
   }
 } 

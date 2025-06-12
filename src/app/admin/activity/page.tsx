@@ -4,13 +4,13 @@ import { useEffect, useState } from 'react';
 
 interface Activity {
   id: string;
-  userId: string;
+  user_id: string;
   username: string;
   action: 'login' | 'logout' | 'extract_contact';
   details?: string;
   timestamp: string;
-  linkedinUrl?: string;
-  contactName?: string;
+  linkedin_url?: string;
+  contact_name?: string;
   success?: boolean;
 }
 
@@ -23,7 +23,7 @@ export default function ActivityLog() {
     fetch('/api/admin/activities')
       .then(res => res.json())
       .then(data => {
-        setActivities(data.activities || []);
+        setActivities(Array.isArray(data) ? data : []);
         setLoading(false);
       })
       .catch(err => {
@@ -155,7 +155,7 @@ export default function ActivityLog() {
                           {activity.username}
                         </div>
                         <div className="text-xs text-gray-500">
-                          ID: {activity.userId}
+                          ID: {activity.user_id}
                         </div>
                       </div>
                     </div>
@@ -171,21 +171,21 @@ export default function ActivityLog() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="text-sm text-gray-900">{activity.details}</div>
-                    {activity.linkedinUrl && (
+                    {activity.linkedin_url && (
                       <div className="text-xs text-gray-500 mt-1">
                         <a 
-                          href={activity.linkedinUrl} 
+                          href={activity.linkedin_url} 
                           target="_blank" 
                           rel="noopener noreferrer"
                           className="text-blue-600 hover:underline"
                         >
-                          {activity.linkedinUrl}
+                          {activity.linkedin_url}
                         </a>
                       </div>
                     )}
-                    {activity.contactName && (
+                    {activity.contact_name && (
                       <div className="text-xs text-gray-500 mt-1">
-                        Contact: {activity.contactName}
+                        Contact: {activity.contact_name}
                       </div>
                     )}
                   </td>

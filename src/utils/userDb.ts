@@ -1,170 +1,153 @@
-import fs from 'fs';
-import path from 'path';
 import bcrypt from 'bcryptjs';
+import { supabase, DbUser, DbActivity, DbContact } from '@/lib/supabase';
 
-// Define user and activity types
-export interface User {
-  id: string;
-  username: string;
-  password: string; // hashed
-  role: 'admin' | 'user';
-  createdAt: string;
-  lastLogin?: string;
-  isActive: boolean;
-}
-
-export interface UserActivity {
-  id: string;
-  userId: string;
-  username: string;
-  action: 'login' | 'logout' | 'extract_contact';
-  details?: string;
-  timestamp: string;
-  linkedinUrl?: string;
-  contactName?: string;
-  success?: boolean;
-}
-
-// Database file paths
-const DB_DIR = path.join(process.cwd(), 'data');
-const USERS_FILE = path.join(DB_DIR, 'users.json');
-const ACTIVITIES_FILE = path.join(DB_DIR, 'activities.json');
-
-// Ensure database directory and files exist
-const initializeDb = () => {
-  if (!fs.existsSync(DB_DIR)) {
-    fs.mkdirSync(DB_DIR, { recursive: true });
-  }
-
-  // Initialize users file with default admin if it doesn't exist
-  if (!fs.existsSync(USERS_FILE)) {
-    const defaultUsers: User[] = [
-      {
-        id: '1',
-        username: 'lirong',
-        password: bcrypt.hashSync('Qq221122', 10),
-        role: 'admin',
-        createdAt: new Date().toISOString(),
-        isActive: true
-      }
-    ];
-    fs.writeFileSync(USERS_FILE, JSON.stringify(defaultUsers, null, 2));
-  }
-
-  // Initialize activities file if it doesn't exist
-  if (!fs.existsSync(ACTIVITIES_FILE)) {
-    fs.writeFileSync(ACTIVITIES_FILE, JSON.stringify([], null, 2));
-  }
-};
+// Re-export types for backward compatibility
+export type User = DbUser;
+export type UserActivity = DbActivity;
 
 // User Management Functions
-export const getAllUsers = (): User[] => {
-  initializeDb();
-  const data = fs.readFileSync(USERS_FILE, 'utf-8');
-  return JSON.parse(data);
-};
-
-export const getUserById = (id: string): User | null => {
-  const users = getAllUsers();
-  return users.find(user => user.id === id) || null;
-};
-
-export const getUserByUsername = (username: string): User | null => {
-  const users = getAllUsers();
-  return users.find(user => user.username.toLowerCase() === username.toLowerCase()) || null;
-};
-
-export const createUser = (username: string, password: string, role: 'admin' | 'user' = 'user'): User => {
-  const users = getAllUsers();
+export const getAllUsers = async (): Promise<User[]> => {
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .order('created_at', { ascending: false });
   
+  if (error) throw error;
+  return data || [];
+};
+
+export const getUserById = async (id: string): Promise<User | null> => {
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', id)
+    .single();
+  
+  if (error) return null;
+  return data;
+};
+
+export const getUserByUsername = async (username: string): Promise<User | null> => {
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('username', username.toLowerCase())
+    .single();
+  
+  if (error) return null;
+  return data;
+};
+
+export const createUser = async (username: string, password: string, role: 'admin' | 'user' = 'user'): Promise<User> => {
   // Check if username already exists
-  if (users.some(user => user.username.toLowerCase() === username.toLowerCase())) {
+  const existing = await getUserByUsername(username);
+  if (existing) {
     throw new Error('Username already exists');
   }
 
-  const newUser: User = {
-    id: Date.now().toString(),
-    username,
-    password: bcrypt.hashSync(password, 10),
-    role,
-    createdAt: new Date().toISOString(),
-    isActive: true
-  };
-
-  users.push(newUser);
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+  const hashedPassword = await bcrypt.hash(password, 10);
   
-  return newUser;
+  const { data, error } = await supabase
+    .from('users')
+    .insert({
+      username: username.toLowerCase(),
+      password: hashedPassword,
+      role,
+      is_active: true
+    })
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data;
 };
 
-export const updateUserLastLogin = (userId: string): void => {
-  const users = getAllUsers();
-  const userIndex = users.findIndex(user => user.id === userId);
+export const updateUserLastLogin = async (userId: string): Promise<void> => {
+  const { error } = await supabase
+    .from('users')
+    .update({ last_login: new Date().toISOString() })
+    .eq('id', userId);
   
-  if (userIndex !== -1) {
-    users[userIndex].lastLogin = new Date().toISOString();
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-  }
+  if (error) throw error;
 };
 
-export const toggleUserStatus = (userId: string): void => {
-  const users = getAllUsers();
-  const userIndex = users.findIndex(user => user.id === userId);
+export const toggleUserStatus = async (userId: string): Promise<void> => {
+  const user = await getUserById(userId);
+  if (!user) return;
   
-  if (userIndex !== -1) {
-    users[userIndex].isActive = !users[userIndex].isActive;
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-  }
+  const { error } = await supabase
+    .from('users')
+    .update({ is_active: !user.is_active })
+    .eq('id', userId);
+  
+  if (error) throw error;
 };
 
-export const deleteUser = (userId: string): void => {
-  const users = getAllUsers();
-  const filteredUsers = users.filter(user => user.id !== userId);
-  fs.writeFileSync(USERS_FILE, JSON.stringify(filteredUsers, null, 2));
+export const deleteUser = async (userId: string): Promise<void> => {
+  const { error } = await supabase
+    .from('users')
+    .delete()
+    .eq('id', userId);
+  
+  if (error) throw error;
 };
 
 // Activity Tracking Functions
-export const getAllActivities = (): UserActivity[] => {
-  initializeDb();
-  const data = fs.readFileSync(ACTIVITIES_FILE, 'utf-8');
-  return JSON.parse(data);
-};
-
-export const getUserActivities = (userId: string): UserActivity[] => {
-  const activities = getAllActivities();
-  return activities.filter(activity => activity.userId === userId);
-};
-
-export const getRecentActivities = (limit: number = 50): UserActivity[] => {
-  const activities = getAllActivities();
-  return activities
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, limit);
-};
-
-export const logActivity = (activity: Omit<UserActivity, 'id' | 'timestamp'>): void => {
-  const activities = getAllActivities();
+export const getAllActivities = async (): Promise<UserActivity[]> => {
+  const { data, error } = await supabase
+    .from('activities')
+    .select('*')
+    .order('timestamp', { ascending: false })
+    .limit(1000);
   
-  const newActivity: UserActivity = {
-    ...activity,
-    id: Date.now().toString(),
-    timestamp: new Date().toISOString()
-  };
+  if (error) throw error;
+  return data || [];
+};
 
-  activities.push(newActivity);
+export const getUserActivities = async (userId: string): Promise<UserActivity[]> => {
+  const { data, error } = await supabase
+    .from('activities')
+    .select('*')
+    .eq('user_id', userId)
+    .order('timestamp', { ascending: false });
   
-  // Keep only last 1000 activities to prevent file from growing too large
-  const recentActivities = activities
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, 1000);
-    
-  fs.writeFileSync(ACTIVITIES_FILE, JSON.stringify(recentActivities, null, 2));
+  if (error) throw error;
+  return data || [];
+};
+
+export const getRecentActivities = async (limit: number = 50): Promise<UserActivity[]> => {
+  const { data, error } = await supabase
+    .from('activities')
+    .select('*')
+    .order('timestamp', { ascending: false })
+    .limit(limit);
+  
+  if (error) throw error;
+  return data || [];
+};
+
+export const logActivity = async (activity: Omit<UserActivity, 'id' | 'timestamp'>): Promise<void> => {
+  const { error } = await supabase
+    .from('activities')
+    .insert({
+      user_id: activity.user_id,
+      username: activity.username,
+      action: activity.action,
+      details: activity.details,
+      linkedin_url: activity.linkedin_url,
+      contact_name: activity.contact_name,
+      success: activity.success
+    });
+  
+  if (error) throw error;
 };
 
 // Statistics Functions
-export const getUserStatistics = (userId: string) => {
-  const activities = getUserActivities(userId);
-  const user = getUserById(userId);
+export const getUserStatistics = async (userId: string) => {
+  const [user, activities] = await Promise.all([
+    getUserById(userId),
+    getUserActivities(userId)
+  ]);
   
   const loginCount = activities.filter(a => a.action === 'login').length;
   const extractionCount = activities.filter(a => a.action === 'extract_contact').length;
@@ -180,19 +163,24 @@ export const getUserStatistics = (userId: string) => {
   };
 };
 
-export const getOverallStatistics = () => {
-  const users = getAllUsers();
-  const activities = getAllActivities();
+export const getOverallStatistics = async () => {
+  const [users, activities] = await Promise.all([
+    getAllUsers(),
+    getAllActivities()
+  ]);
   
   const totalUsers = users.length;
-  const activeUsers = users.filter(u => u.isActive).length;
+  const activeUsers = users.filter(u => u.is_active).length;
   const totalExtractions = activities.filter(a => a.action === 'extract_contact').length;
   const successfulExtractions = activities.filter(a => a.action === 'extract_contact' && a.success).length;
+  
+  const today = new Date().toDateString();
   const todayActivities = activities.filter(a => {
     const activityDate = new Date(a.timestamp).toDateString();
-    const today = new Date().toDateString();
     return activityDate === today;
   });
+  
+  const recentActivities = await getRecentActivities(10);
   
   return {
     totalUsers,
@@ -201,6 +189,39 @@ export const getOverallStatistics = () => {
     successfulExtractions,
     successRate: totalExtractions > 0 ? (successfulExtractions / totalExtractions * 100).toFixed(1) : '0',
     todayActivityCount: todayActivities.length,
-    recentActivities: getRecentActivities(10)
+    recentActivities
   };
+};
+
+// Contact Management Functions (new for Supabase)
+export const saveExtractedContact = async (
+  userId: string,
+  contact: {
+    name: string;
+    title?: string;
+    company?: string;
+    emails: string[];
+    phones: string[];
+    linkedin_url: string;
+  }
+): Promise<void> => {
+  const { error } = await supabase
+    .from('contacts')
+    .insert({
+      user_id: userId,
+      ...contact
+    });
+  
+  if (error) throw error;
+};
+
+export const getUserContacts = async (userId: string): Promise<DbContact[]> => {
+  const { data, error } = await supabase
+    .from('contacts')
+    .select('*')
+    .eq('user_id', userId)
+    .order('extracted_at', { ascending: false });
+  
+  if (error) throw error;
+  return data || [];
 }; 
