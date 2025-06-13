@@ -5,8 +5,10 @@ import { Contact } from '@/types/contact';
 import { isValidLinkedInUrl, extractContactFromLinkedIn, checkAPIConfiguration } from '@/utils/extraction';
 import { saveContact, getStoredContacts, clearStoredContacts } from '@/utils/storage';
 import { generateCSV, downloadCSV } from '@/utils/csv';
+import { useLanguage, interpolate } from '@/contexts/LanguageContext';
 
 const ContactExtractor: React.FC = () => {
+  const { t } = useLanguage();
   const [linkedinUrl, setLinkedinUrl] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -32,23 +34,23 @@ const ContactExtractor: React.FC = () => {
 
   const handleExtractContact = async () => {
     if (!linkedinUrl.trim()) {
-      showFeedback('error', 'Please enter a LinkedIn profile URL');
+      showFeedback('error', t.feedback.enterUrl);
       return;
     }
 
     if (!isValidLinkedInUrl(linkedinUrl)) {
-      showFeedback('error', 'Please enter a valid LinkedIn profile URL (e.g., https://linkedin.com/in/username)');
+      showFeedback('error', t.feedback.invalidUrl);
       return;
     }
 
     // Check API configuration before proceeding
     if (apiConfigured === false) {
-      showFeedback('error', 'Wiza API is not configured. Please check your API key.');
+      showFeedback('error', t.feedback.apiNotConfigured);
       return;
     }
 
     setIsExtracting(true);
-    showFeedback('info', 'Extracting contact information...');
+    showFeedback('info', t.feedback.extracting);
 
     try {
       const result = await extractContactFromLinkedIn(linkedinUrl);
@@ -63,23 +65,29 @@ const ContactExtractor: React.FC = () => {
         
         const contactInfo = [];
         if (emailCount > 0) {
-          contactInfo.push(`${emailCount} email${emailCount > 1 ? 's' : ''}`);
+          const emailText = emailCount === 1 ? 
+            interpolate(t.feedback.email_one, { count: emailCount }) : 
+            interpolate(t.feedback.email_other, { count: emailCount });
+          contactInfo.push(emailText);
         }
         if (phoneCount > 0) {
-          contactInfo.push(`${phoneCount} phone${phoneCount > 1 ? 's' : ''}`);
+          const phoneText = phoneCount === 1 ? 
+            interpolate(t.feedback.phone_one, { count: phoneCount }) : 
+            interpolate(t.feedback.phone_other, { count: phoneCount });
+          contactInfo.push(phoneText);
         }
         
         const detailInfo = contactInfo.length > 0 ? 
-          `Found ${contactInfo.join(' and ')}!` : 
-          'Contact saved (limited info available)';
+          interpolate(t.feedback.foundDetails, { details: contactInfo.join(` ${t.feedback.and} `) }) : 
+          t.feedback.limitedInfo;
         
-        showFeedback('success', `✅ Contact extracted successfully! ${detailInfo}`);
+        showFeedback('success', `${t.feedback.successExtract} ${detailInfo}`);
       } else {
-        showFeedback('error', result.error || 'Failed to extract contact information');
+        showFeedback('error', result.error || t.feedback.failedExtract);
       }
     } catch (error) {
       console.error('Contact extraction error:', error);
-      showFeedback('error', 'An unexpected error occurred during extraction');
+      showFeedback('error', t.feedback.unexpectedError);
     } finally {
       setIsExtracting(false);
     }
@@ -91,13 +99,13 @@ const ContactExtractor: React.FC = () => {
 
     // Check if it's a text file
     if (!file.name.endsWith('.txt')) {
-      showFeedback('error', 'Please upload a .txt file containing LinkedIn URLs (one per line)');
+      showFeedback('error', t.feedback.wrongFileType);
       return;
     }
 
     // Check API configuration before proceeding
     if (apiConfigured === false) {
-      showFeedback('error', 'Wiza API is not configured. Please check your API key.');
+      showFeedback('error', t.feedback.apiNotConfigured);
       return;
     }
 
@@ -129,19 +137,22 @@ const ContactExtractor: React.FC = () => {
       });
 
       if (validUrls.length === 0) {
-        showFeedback('error', 'No valid LinkedIn URLs found in the file. Please ensure each line contains a valid LinkedIn profile URL.');
+        showFeedback('error', t.feedback.noValidUrls);
         return;
       }
 
       if (validUrls.length > 100) {
-        showFeedback('error', `File contains ${validUrls.length} URLs. Maximum allowed is 100 URLs per file to manage costs.`);
+        showFeedback('error', interpolate(t.feedback.tooManyUrls, { count: validUrls.length }));
         return;
       }
 
       if (invalidLines.length > 0) {
-        showFeedback('warning', `Found ${validUrls.length} valid URLs. Skipped ${invalidLines.length} invalid lines.`);
+        showFeedback('warning', interpolate(t.feedback.someInvalidUrls, { 
+          valid: validUrls.length, 
+          invalid: invalidLines.length 
+        }));
       } else {
-        showFeedback('info', `Processing ${validUrls.length} LinkedIn URLs...`);
+        showFeedback('info', interpolate(t.feedback.processingUrls, { count: validUrls.length }));
       }
 
       setIsExtracting(true);
@@ -177,16 +188,16 @@ const ContactExtractor: React.FC = () => {
 
       setContacts(getStoredContacts());
       
-      let message = `✅ Successfully extracted ${successCount} contacts`;
+      let message = interpolate(t.feedback.bulkSuccess, { success: successCount });
       if (failedCount > 0) {
-        message += ` (${failedCount} failed or had no contact info)`;
+        message += ` ${interpolate(t.feedback.bulkPartialFail, { failed: failedCount })}`;
       }
       
       showFeedback('success', message);
 
     } catch (error) {
       console.error('File upload error:', error);
-      showFeedback('error', 'Failed to read the file. Please ensure it\'s a valid text file.');
+      showFeedback('error', t.feedback.fileReadError);
     } finally {
       setIsExtracting(false);
       setBulkProgress(null);
@@ -199,7 +210,7 @@ const ContactExtractor: React.FC = () => {
 
   const handleDownloadCSV = () => {
     if (contacts.length === 0) {
-      showFeedback('error', 'No contacts to download');
+      showFeedback('error', t.feedback.noContactsDownload);
       return;
     }
 
@@ -211,10 +222,10 @@ const ContactExtractor: React.FC = () => {
       // Clear all data after successful download
       clearStoredContacts();
       setContacts([]);
-      showFeedback('success', `📥 Downloaded ${contacts.length} contacts. All data has been cleared for privacy.`);
+      showFeedback('success', interpolate(t.feedback.downloadSuccess, { count: contacts.length }));
     } catch (error) {
       console.error('CSV download error:', error);
-      showFeedback('error', 'Failed to download CSV file');
+      showFeedback('error', t.feedback.csvError);
     }
   };
 
@@ -231,10 +242,10 @@ const ContactExtractor: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 py-16 sm:px-6 lg:px-8">
           <div className="text-center">
             <h1 className="text-4xl md:text-5xl font-bold mb-4">
-              LinkedIn Contact Extractor
+              {t.hero.title}
             </h1>
             <p className="text-xl text-purple-100 max-w-2xl mx-auto">
-              Extract and manage contact details from LinkedIn profiles using their direct URLs
+              {t.hero.subtitle}
             </p>
           </div>
         </div>
@@ -272,8 +283,8 @@ const ContactExtractor: React.FC = () => {
         {/* URL Input Section */}
         <div className="bg-white rounded-3xl shadow-xl p-8 mb-8 border border-gray-100">
           <div className="mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Extract Contact Information</h2>
-            <p className="text-gray-600">Enter a LinkedIn profile URL or upload a file with multiple URLs</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">{t.extraction.title}</h2>
+            <p className="text-gray-600">{t.extraction.subtitle}</p>
           </div>
           
           <div className="flex flex-col gap-6">
@@ -290,7 +301,7 @@ const ContactExtractor: React.FC = () => {
                   value={linkedinUrl}
                   onChange={(e) => setLinkedinUrl(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="https://linkedin.com/in/username"
+                  placeholder={t.extraction.singleUrlPlaceholder}
                   className="pl-10 w-full px-4 py-4 border-2 border-gray-200 rounded-2xl focus:ring-4 focus:ring-purple-100 focus:border-purple-500 outline-none text-gray-900 placeholder-gray-400 transition-all duration-200"
                   disabled={isExtracting}
                 />
@@ -306,14 +317,14 @@ const ContactExtractor: React.FC = () => {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Extracting...
+                    {t.extraction.extracting}
                   </>
                 ) : (
                   <>
                     <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
                     </svg>
-                    Extract Contact
+                    {t.extraction.extractButton}
                   </>
                 )}
               </button>
@@ -325,7 +336,7 @@ const ContactExtractor: React.FC = () => {
                 <div className="w-full border-t border-gray-200"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white text-gray-500">OR</span>
+                <span className="px-4 bg-white text-gray-500">{t.extraction.or}</span>
               </div>
             </div>
 
@@ -333,8 +344,8 @@ const ContactExtractor: React.FC = () => {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Bulk Upload</h3>
-                  <p className="text-sm text-gray-600">Upload a .txt file with LinkedIn URLs (one per line, max 100 URLs)</p>
+                  <h3 className="text-lg font-semibold text-gray-900">{t.extraction.bulkUpload.title}</h3>
+                  <p className="text-sm text-gray-600">{t.extraction.bulkUpload.subtitle}</p>
                 </div>
                 <label className="relative">
                   <input
@@ -353,7 +364,7 @@ const ContactExtractor: React.FC = () => {
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                     </svg>
-                    Choose File
+                    {t.extraction.bulkUpload.chooseFile}
                   </button>
                 </label>
               </div>
@@ -362,7 +373,7 @@ const ContactExtractor: React.FC = () => {
               {bulkProgress && (
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm text-gray-600">
-                    <span>Processing URLs...</span>
+                    <span>{t.extraction.bulkUpload.processing}</span>
                     <span>{bulkProgress.current} / {bulkProgress.total}</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2.5">
@@ -382,10 +393,12 @@ const ContactExtractor: React.FC = () => {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
             <div>
               <h2 className="text-2xl font-bold text-gray-900 mb-1">
-                Saved Contacts
+                {t.contacts.title}
               </h2>
               <p className="text-gray-600">
-                {contacts.length} {contacts.length === 1 ? 'contact' : 'contacts'} extracted
+                {contacts.length === 1 ? 
+                  interpolate(t.contacts.count_one, { count: contacts.length }) : 
+                  interpolate(t.contacts.count_other, { count: contacts.length })}
               </p>
             </div>
             <div className="flex gap-3">
@@ -395,14 +408,14 @@ const ContactExtractor: React.FC = () => {
                     const contactsWithInfo = contacts.filter(contact => contact.email || contact.phone);
                     localStorage.setItem('linkedin_contacts', JSON.stringify(contactsWithInfo));
                     setContacts(contactsWithInfo);
-                    showFeedback('info', 'Removed contacts without email or phone information');
+                    showFeedback('info', t.feedback.removedContacts);
                   }}
                   className="px-5 py-2.5 bg-amber-100 text-amber-700 rounded-xl font-medium hover:bg-amber-200 transition-colors duration-200 flex items-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
-                  Clean Up
+                  {t.contacts.cleanUp}
                 </button>
               )}
               {contacts.length > 0 && (
@@ -413,7 +426,7 @@ const ContactExtractor: React.FC = () => {
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  Download CSV
+                  {t.contacts.downloadCSV}
                 </button>
               )}
             </div>
@@ -426,9 +439,9 @@ const ContactExtractor: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">No contacts yet</h3>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">{t.contacts.noContacts}</h3>
               <p className="text-gray-500 max-w-md mx-auto">
-                Start by entering a LinkedIn profile URL above to extract contact information
+                {t.contacts.noContactsDesc}
               </p>
             </div>
           ) : (
@@ -447,7 +460,7 @@ const ContactExtractor: React.FC = () => {
                           <h3 className="font-semibold text-gray-900 text-lg">{contact.name}</h3>
                           {!contact.email && !contact.phone && (
                             <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">
-                              No Contact Info
+                              {t.contacts.noContactInfo}
                             </span>
                           )}
                         </div>
@@ -464,7 +477,7 @@ const ContactExtractor: React.FC = () => {
                                 </svg>
                                 <span>{email}</span>
                                 {index === 0 && contact.emails && contact.emails.length > 1 && (
-                                  <span className="text-xs text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full">Primary</span>
+                                  <span className="text-xs text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full">{t.contacts.primary}</span>
                                 )}
                               </div>
                             ))}
@@ -488,7 +501,7 @@ const ContactExtractor: React.FC = () => {
                                 </svg>
                                 <span>{phone}</span>
                                 {index === 0 && contact.phones && contact.phones.length > 1 && (
-                                  <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full">Primary</span>
+                                  <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full">{t.contacts.primary}</span>
                                 )}
                               </div>
                             ))}
@@ -504,7 +517,7 @@ const ContactExtractor: React.FC = () => {
                         
                         {!contact.email && !contact.phone && (
                           <div className="text-amber-600 text-sm italic">
-                            Profile found but no contact information available
+                            {t.contacts.profileNoInfo}
                           </div>
                         )}
                         
@@ -513,7 +526,7 @@ const ContactExtractor: React.FC = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                           </svg>
                           <a href={contact.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:text-purple-700 font-medium">
-                            View LinkedIn Profile
+                            {t.contacts.viewProfile}
                           </a>
                         </div>
                       </div>
