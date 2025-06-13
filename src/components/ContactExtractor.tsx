@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Contact } from '@/types/contact';
 import { isValidLinkedInUrl, extractContactFromLinkedIn, checkAPIConfiguration } from '@/utils/extraction';
 import { saveContact, getStoredContacts, clearStoredContacts } from '@/utils/storage';
@@ -12,6 +12,8 @@ const ContactExtractor: React.FC = () => {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info' | 'warning'; message: string } | null>(null);
   const [apiConfigured, setApiConfigured] = useState<boolean | null>(null);
+  const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load contacts from localStorage and check API configuration on component mount
   useEffect(() => {
@@ -80,6 +82,118 @@ const ContactExtractor: React.FC = () => {
       showFeedback('error', 'An unexpected error occurred during extraction');
     } finally {
       setIsExtracting(false);
+    }
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Check if it's a text file
+    if (!file.name.endsWith('.txt')) {
+      showFeedback('error', 'Please upload a .txt file containing LinkedIn URLs (one per line)');
+      return;
+    }
+
+    // Check API configuration before proceeding
+    if (apiConfigured === false) {
+      showFeedback('error', 'Wiza API is not configured. Please check your API key.');
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+      
+      // Extract valid LinkedIn URLs
+      const validUrls: string[] = [];
+      const invalidLines: string[] = [];
+      
+      lines.forEach(line => {
+        if (isValidLinkedInUrl(line)) {
+          validUrls.push(line);
+        } else if (line.includes('linkedin.com')) {
+          // Try to fix common URL issues
+          let fixedUrl = line;
+          if (!line.startsWith('http')) {
+            fixedUrl = 'https://' + line;
+          }
+          if (isValidLinkedInUrl(fixedUrl)) {
+            validUrls.push(fixedUrl);
+          } else {
+            invalidLines.push(line);
+          }
+        } else {
+          invalidLines.push(line);
+        }
+      });
+
+      if (validUrls.length === 0) {
+        showFeedback('error', 'No valid LinkedIn URLs found in the file. Please ensure each line contains a valid LinkedIn profile URL.');
+        return;
+      }
+
+      if (validUrls.length > 100) {
+        showFeedback('error', `File contains ${validUrls.length} URLs. Maximum allowed is 100 URLs per file to manage costs.`);
+        return;
+      }
+
+      if (invalidLines.length > 0) {
+        showFeedback('warning', `Found ${validUrls.length} valid URLs. Skipped ${invalidLines.length} invalid lines.`);
+      } else {
+        showFeedback('info', `Processing ${validUrls.length} LinkedIn URLs...`);
+      }
+
+      setIsExtracting(true);
+      setBulkProgress({ current: 0, total: validUrls.length });
+
+      // Process URLs in batches using individual reveals
+      const extractedContacts: Contact[] = [];
+      let successCount = 0;
+      let failedCount = 0;
+
+      for (let i = 0; i < validUrls.length; i++) {
+        setBulkProgress({ current: i + 1, total: validUrls.length });
+        
+        try {
+          const result = await extractContactFromLinkedIn(validUrls[i]);
+          if (result.success && result.contact) {
+            extractedContacts.push(result.contact);
+            saveContact(result.contact);
+            successCount++;
+          } else {
+            failedCount++;
+          }
+        } catch (error) {
+          console.error(`Failed to extract contact from ${validUrls[i]}:`, error);
+          failedCount++;
+        }
+        
+        // Add a small delay between requests to avoid rate limiting
+        if (i < validUrls.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+        }
+      }
+
+      setContacts(getStoredContacts());
+      
+      let message = `✅ Successfully extracted ${successCount} contacts`;
+      if (failedCount > 0) {
+        message += ` (${failedCount} failed or had no contact info)`;
+      }
+      
+      showFeedback('success', message);
+
+    } catch (error) {
+      console.error('File upload error:', error);
+      showFeedback('error', 'Failed to read the file. Please ensure it\'s a valid text file.');
+    } finally {
+      setIsExtracting(false);
+      setBulkProgress(null);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -159,48 +273,107 @@ const ContactExtractor: React.FC = () => {
         <div className="bg-white rounded-3xl shadow-xl p-8 mb-8 border border-gray-100">
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Extract Contact Information</h2>
-            <p className="text-gray-600">Enter a LinkedIn profile URL to extract contact details</p>
+            <p className="text-gray-600">Enter a LinkedIn profile URL or upload a file with multiple URLs</p>
           </div>
           
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1 relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                </svg>
+          <div className="flex flex-col gap-6">
+            {/* Single URL Input */}
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1 relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                </div>
+                <input
+                  type="url"
+                  value={linkedinUrl}
+                  onChange={(e) => setLinkedinUrl(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="https://linkedin.com/in/username"
+                  className="pl-10 w-full px-4 py-4 border-2 border-gray-200 rounded-2xl focus:ring-4 focus:ring-purple-100 focus:border-purple-500 outline-none text-gray-900 placeholder-gray-400 transition-all duration-200"
+                  disabled={isExtracting}
+                />
               </div>
-              <input
-                type="url"
-                value={linkedinUrl}
-                onChange={(e) => setLinkedinUrl(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="https://linkedin.com/in/username"
-                className="pl-10 w-full px-4 py-4 border-2 border-gray-200 rounded-2xl focus:ring-4 focus:ring-purple-100 focus:border-purple-500 outline-none text-gray-900 placeholder-gray-400 transition-all duration-200"
-                disabled={isExtracting}
-              />
+              <button
+                onClick={handleExtractContact}
+                disabled={isExtracting || (apiConfigured === false)}
+                className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-2xl font-semibold hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center min-w-[200px]"
+              >
+                {isExtracting && !bulkProgress ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Extracting...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                    </svg>
+                    Extract Contact
+                  </>
+                )}
+              </button>
             </div>
-            <button
-              onClick={handleExtractContact}
-              disabled={isExtracting || (apiConfigured === false)}
-              className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-2xl font-semibold hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center min-w-[200px]"
-            >
-              {isExtracting ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Extracting...
-                </>
-              ) : (
-                <>
-                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-                  </svg>
-                  Extract Contact
-                </>
+
+            {/* Divider */}
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-200"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-white text-gray-500">OR</span>
+              </div>
+            </div>
+
+            {/* File Upload */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Bulk Upload</h3>
+                  <p className="text-sm text-gray-600">Upload a .txt file with LinkedIn URLs (one per line, max 100 URLs)</p>
+                </div>
+                <label className="relative">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".txt"
+                    onChange={handleFileUpload}
+                    disabled={isExtracting}
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isExtracting}
+                    className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-medium hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    Choose File
+                  </button>
+                </label>
+              </div>
+
+              {/* Progress Bar */}
+              {bulkProgress && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>Processing URLs...</span>
+                    <span>{bulkProgress.current} / {bulkProgress.total}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div 
+                      className="bg-gradient-to-r from-indigo-600 to-purple-600 h-2.5 rounded-full transition-all duration-300"
+                      style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
               )}
-            </button>
+            </div>
           </div>
         </div>
 

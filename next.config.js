@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   // Disable type checking during build (we'll handle it separately)
   typescript: {
     ignoreBuildErrors: true,
