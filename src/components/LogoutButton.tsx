@@ -1,9 +1,11 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export default function LogoutButton() {
   const router = useRouter();
+  const { t } = useLanguage();
 
   const handleLogout = async () => {
     try {
@@ -25,7 +27,7 @@ export default function LogoutButton() {
       onClick={handleLogout}
       className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors duration-200"
     >
-      Logout
+      {t.nav.logout}
     </button>
   );
 } 
