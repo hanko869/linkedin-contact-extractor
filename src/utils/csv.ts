@@ -2,19 +2,58 @@ import Papa from 'papaparse';
 import { Contact } from '@/types/contact';
 
 export const generateCSV = (contacts: Contact[]): string => {
-  const csvData = contacts.map(contact => ({
-    name: contact.name || 'N/A',
-    email: contact.email || 'N/A',
-    all_emails: contact.emails?.join('; ') || contact.email || 'N/A',
-    phone: contact.phone || 'N/A',
-    all_phones: contact.phones?.join('; ') || contact.phone || 'N/A',
-    linkedinUrl: contact.linkedinUrl,
-    extractedAt: contact.extractedAt
-  }));
+  // Find the maximum number of emails and phones across all contacts
+  let maxEmails = 0;
+  let maxPhones = 0;
+  
+  contacts.forEach(contact => {
+    const emailCount = contact.emails?.length || (contact.email ? 1 : 0);
+    const phoneCount = contact.phones?.length || (contact.phone ? 1 : 0);
+    maxEmails = Math.max(maxEmails, emailCount);
+    maxPhones = Math.max(maxPhones, phoneCount);
+  });
+
+  // Create column headers dynamically
+  const columns = ['name'];
+  
+  // Add email columns
+  for (let i = 1; i <= maxEmails; i++) {
+    columns.push(`email${i}`);
+  }
+  
+  // Add phone columns
+  for (let i = 1; i <= maxPhones; i++) {
+    columns.push(`phone${i}`);
+  }
+  
+  columns.push('linkedinUrl', 'extractedAt');
+
+  // Map contacts to CSV data with separate columns for each email and phone
+  const csvData = contacts.map(contact => {
+    const row: any = {
+      name: contact.name || 'N/A',
+      linkedinUrl: contact.linkedinUrl,
+      extractedAt: contact.extractedAt
+    };
+
+    // Add emails to separate columns
+    const emails = contact.emails || (contact.email ? [contact.email] : []);
+    for (let i = 0; i < maxEmails; i++) {
+      row[`email${i + 1}`] = emails[i] || '';
+    }
+
+    // Add phones to separate columns
+    const phones = contact.phones || (contact.phone ? [contact.phone] : []);
+    for (let i = 0; i < maxPhones; i++) {
+      row[`phone${i + 1}`] = phones[i] || '';
+    }
+
+    return row;
+  });
 
   return Papa.unparse(csvData, {
     header: true,
-    columns: ['name', 'email', 'all_emails', 'phone', 'all_phones', 'linkedinUrl', 'extractedAt']
+    columns: columns
   });
 };
 
