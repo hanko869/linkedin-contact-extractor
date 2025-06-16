@@ -17,7 +17,7 @@ export const zh = {
     or: '或',
     bulkUpload: {
       title: '批量上传',
-      subtitle: '上传包含LinkedIn URL的.txt文件（每行一个URL，最多100个）',
+      subtitle: '上传包含LinkedIn URL的.txt文件（每行一个URL，最多500个）',
       chooseFile: '选择文件',
       processing: '正在处理URL...',
     },
@@ -55,7 +55,7 @@ export const zh = {
     csvError: '下载CSV文件失败',
     wrongFileType: '请上传包含LinkedIn URL的.txt文件（每行一个）',
     noValidUrls: '文件中未找到有效的LinkedIn URL。请确保每行包含一个有效的LinkedIn个人资料URL。',
-    tooManyUrls: '文件包含{{count}}个URL。为控制成本，每个文件最多允许100个URL。',
+    tooManyUrls: '文件包含{{count}}个URL。为控制成本，每个文件最多允许500个URL。',
     someInvalidUrls: '找到{{valid}}个有效URL。跳过了{{invalid}}个无效行。',
     processingUrls: '正在处理{{count}}个LinkedIn URL...',
     bulkSuccess: '✅ 成功提取{{success}}个联系人',

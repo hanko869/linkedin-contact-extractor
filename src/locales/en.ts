@@ -17,7 +17,7 @@ export const en = {
     or: 'OR',
     bulkUpload: {
       title: 'Bulk Upload',
-      subtitle: 'Upload a .txt file with LinkedIn URLs (one per line, max 100 URLs)',
+      subtitle: 'Upload a .txt file with LinkedIn URLs (one per line, max 500 URLs)',
       chooseFile: 'Choose File',
       processing: 'Processing URLs...',
     },
@@ -55,7 +55,7 @@ export const en = {
     csvError: 'Failed to download CSV file',
     wrongFileType: 'Please upload a .txt file containing LinkedIn URLs (one per line)',
     noValidUrls: 'No valid LinkedIn URLs found in the file. Please ensure each line contains a valid LinkedIn profile URL.',
-    tooManyUrls: 'File contains {{count}} URLs. Maximum allowed is 100 URLs per file to manage costs.',
+    tooManyUrls: 'File contains {{count}} URLs. Maximum allowed is 500 URLs per file to manage costs.',
     someInvalidUrls: 'Found {{valid}} valid URLs. Skipped {{invalid}} invalid lines.',
     processingUrls: 'Processing {{count}} LinkedIn URLs...',
     bulkSuccess: '✅ Successfully extracted {{success}} contacts',
