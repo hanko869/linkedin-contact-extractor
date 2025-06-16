@@ -17,6 +17,10 @@ const ContactExtractor: React.FC = () => {
   const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Configuration constants
+  const MAX_BULK_URLS = 500; // Increased from 100, max API limit is 2500
+  const DELAY_BETWEEN_REQUESTS = 2000; // 2 seconds delay to avoid rate limiting
+
   // Load contacts from localStorage and check API configuration on component mount
   useEffect(() => {
     setContacts(getStoredContacts());
@@ -141,7 +145,7 @@ const ContactExtractor: React.FC = () => {
         return;
       }
 
-      if (validUrls.length > 100) {
+      if (validUrls.length > MAX_BULK_URLS) {
         showFeedback('error', interpolate(t.feedback.tooManyUrls, { count: validUrls.length }));
         return;
       }
@@ -182,7 +186,7 @@ const ContactExtractor: React.FC = () => {
         
         // Add a small delay between requests to avoid rate limiting
         if (i < validUrls.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+          await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_REQUESTS));
         }
       }
 
