@@ -26,12 +26,16 @@ export const generateCSV = (contacts: Contact[]): string => {
     columns.push(`phone${i}`);
   }
   
-  columns.push('linkedinUrl', 'extractedAt');
+  columns.push('jobTitle', 'company', 'location', 'education', 'linkedinUrl', 'extractedAt');
 
   // Map contacts to CSV data with separate columns for each email and phone
   const csvData = contacts.map(contact => {
     const row: any = {
       name: contact.name || 'N/A',
+      jobTitle: contact.jobTitle || '',
+      company: contact.company || '',
+      location: contact.location || '',
+      education: contact.education || '',
       linkedinUrl: contact.linkedinUrl,
       extractedAt: contact.extractedAt
     };

@@ -11,6 +11,7 @@ export interface Contact {
   jobTitle?: string;
   company?: string;
   location?: string;
+  education?: string; // Note: Not available from Wiza API, kept for potential future use
 }
 
 export interface ExtractionResult {
