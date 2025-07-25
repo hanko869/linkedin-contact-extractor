@@ -1,9 +1,31 @@
 import { Contact, ExtractionResult } from '@/types/contact';
 import { generateContactId } from './extraction';
 
+// API Key management
+const API_KEYS = [
+  process.env.WIZA_API_KEY || 'c951d1f0b91ab7e5afe187fa747f3668524ad5e2eba2c68a912654b43682cab8',
+  process.env.WIZA_API_KEY_2 || '2ac8378b7aa63804c7d7a57d7e9777600325895beb8410022529c70132bbf61b'
+].filter(key => key && key.length > 0);
+
+// Round-robin counter
+let currentKeyIndex = 0;
+
+// Get next API key using round-robin
+const getNextApiKey = (): string => {
+  const apiKey = API_KEYS[currentKeyIndex];
+  currentKeyIndex = (currentKeyIndex + 1) % API_KEYS.length;
+  console.log(`Using API key index ${currentKeyIndex} of ${API_KEYS.length} keys`);
+  return apiKey;
+};
+
+// Get a specific API key by index (for retries)
+const getApiKeyByIndex = (index: number): string => {
+  return API_KEYS[index % API_KEYS.length];
+};
+
 // Check Wiza API credits
 export const checkWizaCredits = async (): Promise<any> => {
-  const apiKey = process.env.WIZA_API_KEY || 'c951d1f0b91ab7e5afe187fa747f3668524ad5e2eba2c68a912654b43682cab8';
+  const apiKey = getNextApiKey();
   const baseUrl = process.env.WIZA_BASE_URL || 'https://wiza.co';
 
   try {
@@ -172,8 +194,8 @@ const extractLinkedInUsername = (url: string): string | null => {
 
 // Create a list with LinkedIn URL
 const createWizaList = async (linkedinUrl: string): Promise<WizaListResponse> => {
-  // Temporarily hardcode for testing
-  const apiKey = process.env.WIZA_API_KEY || 'c951d1f0b91ab7e5afe187fa747f3668524ad5e2eba2c68a912654b43682cab8';
+  // Use round-robin API key selection
+  const apiKey = getNextApiKey();
   const baseUrl = process.env.WIZA_BASE_URL || 'https://wiza.co';
 
   console.log('Environment check:', {
@@ -375,7 +397,7 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
   
   try {
     // Skip the bulk list API entirely and use Individual Reveal
-    const apiKey = process.env.WIZA_API_KEY || 'c951d1f0b91ab7e5afe187fa747f3668524ad5e2eba2c68a912654b43682cab8';
+    const apiKey = getNextApiKey();
     const baseUrl = process.env.WIZA_BASE_URL || 'https://wiza.co';
 
     // Create Individual Reveal
@@ -680,7 +702,7 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
 
 // Individual Reveal API - Alternative approach for better contact data
 const createIndividualReveal = async (linkedinUrl: string): Promise<any> => {
-  const apiKey = process.env.WIZA_API_KEY || 'c951d1f0b91ab7e5afe187fa747f3668524ad5e2eba2c68a912654b43682cab8';
+  const apiKey = getNextApiKey();
   const baseUrl = process.env.WIZA_BASE_URL || 'https://wiza.co';
 
   const payload = {
@@ -884,7 +906,7 @@ export const searchProspects = async (
   location?: string,
   size: number = 20
 ): Promise<ProspectSearchResponse> => {
-  const apiKey = process.env.WIZA_API_KEY || 'c951d1f0b91ab7e5afe187fa747f3668524ad5e2eba2c68a912654b43682cab8';
+  const apiKey = getNextApiKey();
   const baseUrl = process.env.WIZA_BASE_URL || 'https://wiza.co';
 
   if (!apiKey) {
