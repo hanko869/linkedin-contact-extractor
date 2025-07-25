@@ -7,28 +7,183 @@ const API_KEYS = [
   process.env.WIZA_API_KEY_2 || '2ac8378b7aa63804c7d7a57d7e9777600325895beb8410022529c70132bbf61b'
 ].filter(key => key && key.length > 0);
 
-// Round-robin counter
-let currentKeyIndex = 0;
+// API Key health tracking
+interface ApiKeyHealth {
+  key: string;
+  index: number;
+  isHealthy: boolean;
+  lastChecked: number;
+  consecutiveFailures: number;
+  credits?: number;
+}
 
-// Get next API key using round-robin
-const getNextApiKey = (): string => {
-  const apiKey = API_KEYS[currentKeyIndex];
-  currentKeyIndex = (currentKeyIndex + 1) % API_KEYS.length;
-  console.log(`Using API key index ${currentKeyIndex} of ${API_KEYS.length} keys`);
-  return apiKey;
+// Track health status of each API key
+const apiKeyHealthMap: Map<string, ApiKeyHealth> = new Map();
+
+// Initialize health tracking for all keys
+API_KEYS.forEach((key, index) => {
+  apiKeyHealthMap.set(key, {
+    key,
+    index,
+    isHealthy: true,
+    lastChecked: 0,
+    consecutiveFailures: 0
+  });
+});
+
+// Health check interval (5 minutes)
+const HEALTH_CHECK_INTERVAL = 5 * 60 * 1000;
+
+// Maximum consecutive failures before marking unhealthy
+const MAX_CONSECUTIVE_FAILURES = 3;
+
+// Get all healthy API keys
+const getHealthyApiKeys = (): ApiKeyHealth[] => {
+  return Array.from(apiKeyHealthMap.values()).filter(health => health.isHealthy);
 };
 
-// Get a specific API key by index (for retries)
-const getApiKeyByIndex = (index: number): string => {
-  return API_KEYS[index % API_KEYS.length];
+// Mark API key as failed
+const markApiKeyFailed = (apiKey: string) => {
+  const health = apiKeyHealthMap.get(apiKey);
+  if (health) {
+    health.consecutiveFailures++;
+    if (health.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      health.isHealthy = false;
+      console.error(`API key index ${health.index} marked as unhealthy after ${MAX_CONSECUTIVE_FAILURES} failures`);
+    }
+  }
 };
+
+// Mark API key as successful
+const markApiKeySuccess = (apiKey: string) => {
+  const health = apiKeyHealthMap.get(apiKey);
+  if (health) {
+    health.consecutiveFailures = 0;
+    health.isHealthy = true;
+    health.lastChecked = Date.now();
+  }
+};
+
+// Check if we should re-check a previously failed API key
+const shouldRecheckApiKey = (health: ApiKeyHealth): boolean => {
+  return !health.isHealthy && 
+         (Date.now() - health.lastChecked) > HEALTH_CHECK_INTERVAL;
+};
+
+// Get the best API key to use (with failover support)
+const getBestApiKey = (): string | null => {
+  // First, check if any unhealthy keys should be rechecked
+  for (const health of apiKeyHealthMap.values()) {
+    if (shouldRecheckApiKey(health)) {
+      health.isHealthy = true;
+      health.consecutiveFailures = 0;
+      console.log(`Re-enabling API key index ${health.index} for health check`);
+    }
+  }
+
+  const healthyKeys = getHealthyApiKeys();
+  if (healthyKeys.length === 0) {
+    console.error('No healthy API keys available!');
+    return null;
+  }
+
+  // Use the API key with the least recent usage
+  healthyKeys.sort((a, b) => a.lastChecked - b.lastChecked);
+  return healthyKeys[0].key;
+};
+
+// Execute with failover - tries each healthy API key until one succeeds
+async function executeWithFailover<T>(
+  operation: (apiKey: string) => Promise<T>,
+  operationName: string
+): Promise<T> {
+  const healthyKeys = getHealthyApiKeys();
+  
+  if (healthyKeys.length === 0) {
+    throw new Error('No healthy API keys available');
+  }
+
+  let lastError: any;
+  
+  for (const keyHealth of healthyKeys) {
+    try {
+      console.log(`Attempting ${operationName} with API key index ${keyHealth.index}`);
+      const result = await operation(keyHealth.key);
+      markApiKeySuccess(keyHealth.key);
+      return result;
+    } catch (error: any) {
+      console.error(`${operationName} failed with API key index ${keyHealth.index}:`, error.message);
+      markApiKeyFailed(keyHealth.key);
+      lastError = error;
+      
+      // Check if this is a credits/quota error
+      if (error.message?.includes('credits') || 
+          error.message?.includes('quota') || 
+          error.message?.includes('limit')) {
+        console.log(`API key index ${keyHealth.index} appears to be out of credits`);
+      }
+    }
+  }
+  
+  throw lastError || new Error(`All API keys failed for ${operationName}`);
+}
+
+// Execute operations in parallel with multiple API keys
+async function executeInParallel<T>(
+  linkedinUrls: string[],
+  operation: (url: string, apiKey: string) => Promise<T>
+): Promise<Map<string, T>> {
+  const results = new Map<string, T>();
+  const healthyKeys = getHealthyApiKeys();
+  
+  if (healthyKeys.length === 0) {
+    throw new Error('No healthy API keys available');
+  }
+
+  // Create a queue of URLs to process
+  const urlQueue = [...linkedinUrls];
+  const processingPromises: Promise<void>[] = [];
+
+  // Process URLs in parallel using all healthy API keys
+  for (const keyHealth of healthyKeys) {
+    const processWithKey = async () => {
+      while (urlQueue.length > 0) {
+        const url = urlQueue.shift();
+        if (!url) break;
+
+        try {
+          console.log(`Processing ${url} with API key index ${keyHealth.index}`);
+          const result = await operation(url, keyHealth.key);
+          results.set(url, result);
+          markApiKeySuccess(keyHealth.key);
+        } catch (error: any) {
+          console.error(`Failed to process ${url} with API key index ${keyHealth.index}:`, error.message);
+          markApiKeyFailed(keyHealth.key);
+          
+          // Put the URL back in the queue if API key failed
+          if (getHealthyApiKeys().length > 0) {
+            urlQueue.push(url);
+          } else {
+            throw new Error(`Failed to process ${url}: All API keys exhausted`);
+          }
+        }
+      }
+    };
+
+    processingPromises.push(processWithKey());
+  }
+
+  // Wait for all parallel operations to complete
+  await Promise.all(processingPromises);
+  
+  return results;
+}
 
 // Check Wiza API credits
 export const checkWizaCredits = async (): Promise<any> => {
-  const apiKey = getNextApiKey();
-  const baseUrl = process.env.WIZA_BASE_URL || 'https://wiza.co';
-
-  try {
+  return executeWithFailover(async (apiKey) => {
+    const baseUrl = process.env.WIZA_BASE_URL || 'https://wiza.co';
+    
     const response = await fetch(`${baseUrl}/api/meta/credits`, {
       method: 'GET',
       headers: {
@@ -40,7 +195,7 @@ export const checkWizaCredits = async (): Promise<any> => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Failed to check credits:', { status: response.status, error: errorText });
-      return null;
+      throw new Error(`Credit check failed: ${response.status}`);
     }
 
     const data = await response.json();
@@ -49,10 +204,7 @@ export const checkWizaCredits = async (): Promise<any> => {
     console.log('=== END CREDITS CHECK ===');
     
     return data;
-  } catch (error) {
-    console.error('Error checking Wiza credits:', error);
-    return null;
-  }
+  }, 'checkWizaCredits');
 };
 
 // Wiza API response interfaces (corrected based on OpenAPI spec)
@@ -194,9 +346,12 @@ const extractLinkedInUsername = (url: string): string | null => {
 
 // Create a list with LinkedIn URL
 const createWizaList = async (linkedinUrl: string): Promise<WizaListResponse> => {
-  // Use round-robin API key selection
-  const apiKey = getNextApiKey();
+  const apiKey = getBestApiKey();
   const baseUrl = process.env.WIZA_BASE_URL || 'https://wiza.co';
+
+  if (!apiKey) {
+    throw new Error('No healthy API keys available for list creation.');
+  }
 
   console.log('Environment check:', {
     hasEnvApiKey: !!process.env.WIZA_API_KEY,
@@ -204,10 +359,6 @@ const createWizaList = async (linkedinUrl: string): Promise<WizaListResponse> =>
     usingApiKey: !!apiKey,
     apiKeyLength: apiKey?.length
   });
-
-  if (!apiKey) {
-    throw new Error('Wiza API key not configured');
-  }
 
   const username = extractLinkedInUsername(linkedinUrl);
   const listName = `Test-${username || 'Unknown'}-${Date.now()}`;
@@ -293,8 +444,12 @@ const createWizaList = async (linkedinUrl: string): Promise<WizaListResponse> =>
 
 // Check list status
 const checkWizaListStatus = async (listId: string): Promise<WizaListStatusResponse> => {
-  const apiKey = process.env.WIZA_API_KEY || 'c951d1f0b91ab7e5afe187fa747f3668524ad5e2eba2c68a912654b43682cab8';
+  const apiKey = getBestApiKey();
   const baseUrl = process.env.WIZA_BASE_URL || 'https://wiza.co';
+
+  if (!apiKey) {
+    throw new Error('No healthy API keys available for list status check.');
+  }
 
   const response = await fetch(`${baseUrl}/api/lists/${listId}`, {
     method: 'GET',
@@ -314,8 +469,12 @@ const checkWizaListStatus = async (listId: string): Promise<WizaListStatusRespon
 
 // Get contacts from completed list
 const getWizaContacts = async (listId: string): Promise<WizaContactsResponse> => {
-  const apiKey = process.env.WIZA_API_KEY || 'c951d1f0b91ab7e5afe187fa747f3668524ad5e2eba2c68a912654b43682cab8';
+  const apiKey = getBestApiKey();
   const baseUrl = process.env.WIZA_BASE_URL || 'https://wiza.co';
+
+  if (!apiKey) {
+    throw new Error('No healthy API keys available for contact retrieval.');
+  }
 
   const response = await fetch(`${baseUrl}/api/lists/${listId}/contacts?segment=people`, {
     method: 'GET',
@@ -375,29 +534,39 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
   console.log('Starting Wiza contact extraction for:', linkedinUrl);
   console.log('📱 IMPORTANT: Using Individual Reveal API for complete contact data (including phone numbers)');
   
-  // Check available credits first
-  const credits = await checkWizaCredits();
-  if (credits && credits.credits) {
-    console.log('Available Wiza credits:', {
-      email_credits: credits.credits.email_credits,
-      phone_credits: credits.credits.phone_credits,
-      api_credits: credits.credits.api_credits
-    });
-    
-    // Check if user has phone credits
-    if (credits.credits.phone_credits === 0 || credits.credits.phone_credits === '0') {
-      console.warn('⚠️ WARNING: You have 0 phone credits. Phone numbers will not be returned.');
-      console.warn('⚠️ To get phone numbers, you need to add phone credits to your Wiza account.');
-    }
-  }
-  
-  // The Wiza bulk list contacts API (/api/lists/{id}/contacts) does NOT return phone fields
-  // according to the OpenAPI specification. Only the Individual Reveal API returns phone numbers.
-  // So we go directly to Individual Reveal for complete contact information.
-  
+  // Check available credits across all healthy API keys
+  let hasCredits = false;
   try {
-    // Skip the bulk list API entirely and use Individual Reveal
-    const apiKey = getNextApiKey();
+    const credits = await checkWizaCredits();
+    if (credits && credits.credits) {
+      console.log('Available Wiza credits:', {
+        email_credits: credits.credits.email_credits,
+        phone_credits: credits.credits.phone_credits,
+        api_credits: credits.credits.api_credits
+      });
+      
+      // Check if user has phone credits
+      if (credits.credits.phone_credits === 0 || credits.credits.phone_credits === '0') {
+        console.warn('⚠️ WARNING: You have 0 phone credits. Phone numbers will not be returned.');
+        console.warn('⚠️ To get phone numbers, you need to add phone credits to your Wiza account.');
+      }
+      
+      hasCredits = credits.credits.api_credits > 0 || credits.credits.email_credits > 0;
+    }
+  } catch (error) {
+    console.error('Failed to check credits, proceeding with extraction anyway:', error);
+    hasCredits = true; // Proceed anyway in case it's just a credit check issue
+  }
+
+  if (!hasCredits) {
+    return {
+      success: false,
+      error: 'No credits available across all API keys. Please add credits to your Wiza account.'
+    };
+  }
+
+  // Use failover system for the extraction
+  return executeWithFailover(async (apiKey) => {
     const baseUrl = process.env.WIZA_BASE_URL || 'https://wiza.co';
 
     // Create Individual Reveal
@@ -429,6 +598,12 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
         status: response.status, 
         error: errorText
       });
+      
+      // Check for specific error conditions
+      if (errorText.includes('credits') || errorText.includes('quota')) {
+        throw new Error(`API key out of credits: ${response.status}`);
+      }
+      
       throw new Error(`Failed to create individual reveal: ${response.status} ${errorText}`);
     }
 
@@ -456,254 +631,119 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
           throw new Error(`Failed to check reveal status: ${statusResponse.status} ${errorText}`);
         }
 
-        const status = await statusResponse.json();
-        console.log('Individual Reveal status:', { 
-          status: status.data.status, 
-          isComplete: status.data.is_complete 
-        });
+        const statusData = await statusResponse.json();
+        console.log('Reveal status:', statusData.data?.status);
 
-        if (status.data.is_complete) {
-          console.log('=== INDIVIDUAL REVEAL COMPLETE OBJECT ===');
-          console.log(JSON.stringify(status.data, null, 2));
-          console.log('=== END INDIVIDUAL REVEAL OBJECT ===');
+        if (statusData.data?.status === 'finished') {
+          console.log('✅ Individual Reveal completed successfully!');
+          console.log('Raw API response:', JSON.stringify(statusData, null, 2));
 
-          // Extract ALL emails
-          const allEmails: string[] = [];
-          
-          // Add primary email if exists
-          if (status.data.email) {
-            allEmails.push(status.data.email);
+          const contact = statusData.data?.contact;
+          if (!contact) {
+            throw new Error('No contact data in response');
           }
-          
-          // Add all emails from emails array
-          if (status.data.emails && Array.isArray(status.data.emails)) {
-            status.data.emails.forEach((emailObj: any) => {
-              if (emailObj.email && !allEmails.includes(emailObj.email)) {
-                allEmails.push(emailObj.email);
-              }
-            });
-          }
-          
-          console.log('All emails found:', allEmails);
-          
-          // Extract ALL phone numbers
-          const allPhones: string[] = [];
-          
-          // Add primary phone fields if they exist
-          if (status.data.mobile_phone) {
-            allPhones.push(status.data.mobile_phone);
-          }
-          if (status.data.phone_number && !allPhones.includes(status.data.phone_number)) {
-            allPhones.push(status.data.phone_number);
-          }
-          
-          // Add all phones from phones array
-          if (status.data.phones && Array.isArray(status.data.phones)) {
-            status.data.phones.forEach((phoneObj: any) => {
-              const phoneNum = phoneObj.number || phoneObj.pretty_number;
-              if (phoneNum && !allPhones.includes(phoneNum)) {
-                allPhones.push(phoneNum);
-              }
-            });
-          }
-          
-          console.log('All phones found:', allPhones);
-          
-          // Debug: Log all phone-related fields
-          console.log('Phone field debugging:', {
-            mobile_phone: status.data.mobile_phone,
-            phone_number: status.data.phone_number,
-            phones: status.data.phones,
-            phone_status: status.data.phone_status,
-            hasPhones: !!status.data.phones,
-            phonesLength: status.data.phones?.length || 0,
-            enrichmentLevel: status.data.enrichment_level
-          });
 
-          // Extract contact information directly from reveal data
-          const contact: Contact = {
+          // Extract contact information
+          const extractedContact: Contact = {
             id: generateContactId(),
-            linkedinUrl,
-            name: status.data.name || 'Unknown Contact',
-            email: allEmails[0], // Primary email for backward compatibility
-            emails: allEmails.length > 0 ? allEmails : undefined,
-            phone: allPhones[0], // Primary phone for backward compatibility
-            phones: allPhones.length > 0 ? allPhones : undefined,
-            extractedAt: new Date().toISOString(),
-            jobTitle: status.data.title,
-            company: status.data.company,
-            location: status.data.location
+            linkedinUrl: linkedinUrl,
+            name: contact.full_name || contact.name || 'Unknown',
+            jobTitle: contact.job_title || contact.headline || '',
+            company: contact.job_company_name || contact.company || '',
+            location: contact.location || '',
+            email: contact.email || '',
+            emails: [],
+            phone: '',
+            phones: [],
+            extractedAt: new Date().toISOString()
           };
 
-          console.log('Individual Reveal Contact created:', {
-            id: contact.id,
-            name: contact.name,
-            hasEmail: !!contact.email,
-            hasPhone: !!contact.phone,
-            email: contact.email,
-            phone: contact.phone
+          // Handle emails - check all possible email fields
+          const emailFields = [
+            contact.email,
+            contact.work_email,
+            contact.personal_email,
+            contact.likely_email,
+            contact.emails?.[0]
+          ];
+
+          for (const email of emailFields) {
+            if (email && extractedContact.emails && !extractedContact.emails.includes(email)) {
+              extractedContact.emails.push(email);
+            }
+          }
+
+          // Set primary email
+          if (extractedContact.emails && extractedContact.emails.length > 0) {
+            extractedContact.email = extractedContact.emails[0];
+          }
+
+          // Handle phones - check all possible phone fields
+          const phoneFields = [
+            contact.phone_number,
+            contact.phone,
+            contact.mobile_phone,
+            contact.work_phone,
+            contact.personal_phone,
+            contact.phones?.[0]
+          ];
+
+          for (const phone of phoneFields) {
+            if (phone && extractedContact.phones && !extractedContact.phones.includes(phone)) {
+              extractedContact.phones.push(phone);
+            }
+          }
+
+          // Set primary phone
+          if (extractedContact.phones && extractedContact.phones.length > 0) {
+            extractedContact.phone = extractedContact.phones[0];
+          }
+
+          console.log('📞 Phone extraction:', {
+            found_phones: extractedContact.phones,
+            raw_phone_fields: {
+              phone_number: contact.phone_number,
+              phone: contact.phone,
+              mobile_phone: contact.mobile_phone,
+              work_phone: contact.work_phone
+            }
           });
 
-          if (!contact.email && !contact.phone) {
-            return {
-              success: false,
-              error: 'Profile found but no contact information returned. Your Wiza API key may not have phone access permissions. Check console logs for detailed API response.'
-            };
-          }
-
-          // Log credits used if available
-          if (status.data.credits) {
-            console.log('Credits used:', status.data.credits);
-          }
+          console.log('✅ Successfully extracted contact:', {
+            name: extractedContact.name,
+            emails: extractedContact.emails,
+            phones: extractedContact.phones,
+            location: extractedContact.location
+          });
 
           return {
             success: true,
-            contact
+            contact: extractedContact
           };
+        } else if (statusData.data?.status === 'failed') {
+          throw new Error('Individual Reveal failed: ' + (statusData.data?.error || 'Unknown error'));
         }
 
-        // Wait before next poll
+        // Still processing, wait and try again
         await new Promise(resolve => setTimeout(resolve, pollInterval));
-      } catch (error) {
-        console.log('Individual Reveal status check error:', error);
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
+      } catch (pollError) {
+        console.error('Error polling reveal status:', pollError);
+        // Continue polling despite errors
       }
     }
 
-    throw new Error('Individual Reveal processing timeout');
-
-  } catch (error) {
-    console.error('Individual Reveal API error:', error);
-    return {
-      success: false,
-      error: `Individual Reveal failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-    };
-  }
-  
-  /* ORIGINAL BULK LIST CODE BELOW - KEEPING FOR REFERENCE BUT NOT USING
-  try {
-    console.log('Starting Wiza contact extraction for:', linkedinUrl);
-
-    // Step 1: Try bulk list API first
-    const listResponse = await createWizaList(linkedinUrl);
-    const completedStatus = await waitForListCompletion(listResponse.data.id.toString());
-
-    // Step 3: Try to get contacts from bulk list
-    try {
-      const contactsResponse = await getWizaContacts(listResponse.data.id.toString());
-      
-      if (!contactsResponse.data || contactsResponse.data.length === 0) {
-        console.log('🔄 No contact data from bulk list, trying Individual Reveal API...');
-        return await extractContactWithWizaIndividual(linkedinUrl);
-      }
-
-      const wizaContact = contactsResponse.data[0];
-      
-      // DEBUG: Log the complete contact object to see actual field names
-      console.log('=== FULL WIZA CONTACT OBJECT (BULK LIST) ===');
-      console.log(JSON.stringify(wizaContact, null, 2));
-      console.log('=== END CONTACT OBJECT ===');
-      
-      const primaryEmail = wizaContact.email || wizaContact.personal_email1 || wizaContact.personal_email;
-      const primaryPhone = wizaContact.phone_number || wizaContact.mobile_phone || wizaContact.phone_number1 || wizaContact.mobile_phone1 || wizaContact.phone_number2;
-      
-      console.log('Bulk List Contact data extracted:', {
-        name: wizaContact.full_name,
-        email: primaryEmail,
-        phone: primaryPhone,
-        emailStatus: wizaContact.email_status,
-        emailType: wizaContact.email_type,
-        title: wizaContact.title,
-        company: wizaContact.company
-      });
-
-      // If bulk list didn't find contact info, try Individual Reveal
-      if ((!primaryEmail && !primaryPhone) || wizaContact.email_status === 'unfound') {
-        console.log('🔄 Bulk list found profile but no contact info (email_status: unfound), trying Individual Reveal API...');
-        return await extractContactWithWizaIndividual(linkedinUrl);
-      }
-
-      // Step 4: Create contact object from bulk list data
-      const contact: Contact = {
-        id: generateContactId(),
-        linkedinUrl,
-        name: wizaContact.full_name || `${wizaContact.first_name} ${wizaContact.last_name}`.trim() || 'Unknown Contact',
-        email: primaryEmail,
-        phone: primaryPhone,
-        extractedAt: new Date().toISOString(),
-        jobTitle: wizaContact.title,
-        company: wizaContact.company,
-        location: wizaContact.location
-      };
-
-      console.log('Bulk List Contact created successfully:', {
-        id: contact.id,
-        name: contact.name,
-        hasEmail: !!contact.email,
-        hasPhone: !!contact.phone,
-        jobTitle: contact.jobTitle,
-        company: contact.company
-      });
-
-      return {
-        success: true,
-        contact
-      };
-
-    } catch (contactError: unknown) {
-      if (contactError instanceof Error && contactError.message === 'PROFILE_FOUND_NO_CONTACTS') {
-        console.log('🔄 Bulk list API returned "no contacts to export", trying Individual Reveal API...');
-        return await extractContactWithWizaIndividual(linkedinUrl);
-      }
-      if (contactError instanceof Error) {
-        throw contactError;
-      }
-      throw new Error('Unknown error occurred');
-    }
-
-  } catch (error) {
-    console.error('Wiza API error:', error);
-    
-    // If bulk list API failed completely, try Individual Reveal as last resort
-    if (error instanceof Error && (
-      error.message.includes('timeout') || 
-      error.message.includes('failed') ||
-      error.message.includes('400')
-    )) {
-      console.log('🔄 Bulk list API failed, trying Individual Reveal API as fallback...');
-      return await extractContactWithWizaIndividual(linkedinUrl);
-    }
-    
-    let errorMessage = 'An unexpected error occurred while extracting contact information.';
-    
-    if (error instanceof Error) {
-      if (error.message.includes('API key')) {
-        errorMessage = 'Wiza API key not configured or invalid. Please check your API credentials.';
-      } else if (error.message.includes('timeout')) {
-        errorMessage = 'Request timeout. The contact extraction is taking longer than expected. Please try again.';
-      } else if (error.message.includes('401')) {
-        errorMessage = 'Authentication failed. Please verify your Wiza API key.';
-      } else if (error.message.includes('429')) {
-        errorMessage = 'Rate limit exceeded. Please try again in a few minutes.';
-      } else if (error.message.includes('400')) {
-        errorMessage = 'Invalid LinkedIn URL format. Please ensure you\'re using a valid LinkedIn profile URL.';
-      } else {
-        errorMessage = error.message;
-      }
-    }
-    
-    return {
-      success: false,
-      error: errorMessage
-    };
-  }
-  */
+    throw new Error('Individual Reveal timed out after 3 minutes');
+  }, 'extractContactWithWiza');
 };
 
 // Individual Reveal API - Alternative approach for better contact data
 const createIndividualReveal = async (linkedinUrl: string): Promise<any> => {
-  const apiKey = getNextApiKey();
+  const apiKey = getBestApiKey();
   const baseUrl = process.env.WIZA_BASE_URL || 'https://wiza.co';
+
+  if (!apiKey) {
+    throw new Error('No healthy API keys available for individual reveal.');
+  }
 
   const payload = {
     individual_reveal: {
@@ -743,8 +783,12 @@ const createIndividualReveal = async (linkedinUrl: string): Promise<any> => {
 
 // Check Individual Reveal status
 const checkIndividualRevealStatus = async (revealId: string): Promise<any> => {
-  const apiKey = process.env.WIZA_API_KEY || 'c951d1f0b91ab7e5afe187fa747f3668524ad5e2eba2c68a912654b43682cab8';
+  const apiKey = getBestApiKey();
   const baseUrl = process.env.WIZA_BASE_URL || 'https://wiza.co';
+
+  if (!apiKey) {
+    throw new Error('No healthy API keys available for reveal status check.');
+  }
 
   const response = await fetch(`${baseUrl}/api/individual_reveals/${revealId}`, {
     method: 'GET',
@@ -906,11 +950,11 @@ export const searchProspects = async (
   location?: string,
   size: number = 20
 ): Promise<ProspectSearchResponse> => {
-  const apiKey = getNextApiKey();
+  const apiKey = getBestApiKey();
   const baseUrl = process.env.WIZA_BASE_URL || 'https://wiza.co';
 
   if (!apiKey) {
-    throw new Error('Wiza API key not configured');
+    throw new Error('No healthy API keys available for prospect search.');
   }
 
   // Build filters object
@@ -1009,11 +1053,11 @@ export const createProspectList = async (
   location?: string,
   maxProfiles: number = 20
 ): Promise<ProspectListResponse> => {
-  const apiKey = process.env.WIZA_API_KEY || 'c951d1f0b91ab7e5afe187fa747f3668524ad5e2eba2c68a912654b43682cab8';
+  const apiKey = getBestApiKey();
   const baseUrl = process.env.WIZA_BASE_URL || 'https://wiza.co';
 
   if (!apiKey) {
-    throw new Error('Wiza API key not configured');
+    throw new Error('No healthy API keys available for prospect list creation.');
   }
 
   // Build filters object (same as search)
@@ -1110,4 +1154,186 @@ export const createProspectList = async (
   console.log('Prospect list created:', data);
   
   return data;
+}; 
+
+// Bulk extraction with parallel processing using multiple API keys
+export const extractContactsInParallel = async (linkedinUrls: string[]): Promise<Map<string, ExtractionResult>> => {
+  console.log(`Starting parallel extraction for ${linkedinUrls.length} LinkedIn URLs`);
+  console.log(`Available healthy API keys: ${getHealthyApiKeys().length}`);
+  
+  if (linkedinUrls.length === 0) {
+    return new Map();
+  }
+
+  // First validate all URLs
+  const validUrls = linkedinUrls.filter(url => url && url.includes('linkedin.com/in/'));
+  const invalidUrls = linkedinUrls.filter(url => !url || !url.includes('linkedin.com/in/'));
+
+  if (invalidUrls.length > 0) {
+    console.warn(`Skipping ${invalidUrls.length} invalid URLs:`, invalidUrls);
+  }
+
+  if (validUrls.length === 0) {
+    console.error('No valid LinkedIn URLs to process');
+    return new Map();
+  }
+
+  try {
+    // Use the parallel processing system
+    const results = await executeInParallel(validUrls, async (linkedinUrl, apiKey) => {
+      const baseUrl = process.env.WIZA_BASE_URL || 'https://wiza.co';
+
+      // Create Individual Reveal for this URL
+      const payload = {
+        individual_reveal: {
+          profile_url: linkedinUrl
+        },
+        enrichment_level: 'full',
+        email_options: {
+          accept_work: true,
+          accept_personal: true
+        }
+      };
+
+      const response = await fetch(`${baseUrl}/api/individual_reveals`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        if (errorText.includes('credits') || errorText.includes('quota')) {
+          throw new Error(`API key out of credits`);
+        }
+        throw new Error(`Failed to create reveal: ${response.status}`);
+      }
+
+      const revealResponse = await response.json();
+      const revealId = revealResponse.data.id.toString();
+      
+      // Poll for completion
+      const maxWaitTime = 180000; // 3 minutes
+      const pollInterval = 5000; // 5 seconds
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitTime) {
+        const statusResponse = await fetch(`${baseUrl}/api/individual_reveals/${revealId}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          }
+        });
+
+        if (statusResponse.ok) {
+          const statusData = await statusResponse.json();
+          
+          if (statusData.data?.status === 'finished') {
+            const contact = statusData.data?.contact;
+            if (!contact) {
+              return {
+                success: false,
+                error: 'No contact data in response'
+              };
+            }
+
+            // Extract contact information (same logic as single extraction)
+            const extractedContact: Contact = {
+              id: generateContactId(),
+              linkedinUrl: linkedinUrl,
+              name: contact.full_name || contact.name || 'Unknown',
+              jobTitle: contact.job_title || contact.headline || '',
+              company: contact.job_company_name || contact.company || '',
+              location: contact.location || '',
+              email: '',
+              emails: [],
+              phone: '',
+              phones: [],
+              extractedAt: new Date().toISOString()
+            };
+
+            // Extract emails
+            const emailFields = [contact.email, contact.work_email, contact.personal_email];
+            for (const email of emailFields) {
+              if (email && extractedContact.emails && !extractedContact.emails.includes(email)) {
+                extractedContact.emails.push(email);
+              }
+            }
+            if (extractedContact.emails && extractedContact.emails.length > 0) {
+              extractedContact.email = extractedContact.emails[0];
+            }
+
+            // Extract phones
+            const phoneFields = [contact.phone_number, contact.phone, contact.mobile_phone];
+            for (const phone of phoneFields) {
+              if (phone && extractedContact.phones && !extractedContact.phones.includes(phone)) {
+                extractedContact.phones.push(phone);
+              }
+            }
+            if (extractedContact.phones && extractedContact.phones.length > 0) {
+              extractedContact.phone = extractedContact.phones[0];
+            }
+
+            return {
+              success: true,
+              contact: extractedContact
+            };
+          } else if (statusData.data?.status === 'failed') {
+            return {
+              success: false,
+              error: 'Reveal failed: ' + (statusData.data?.error || 'Unknown error')
+            };
+          }
+        }
+
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+      }
+
+      return {
+        success: false,
+        error: 'Extraction timed out'
+      };
+    });
+
+    // Convert Map to extraction results
+    const extractionResults = new Map<string, ExtractionResult>();
+    
+    for (const [url, result] of results) {
+      extractionResults.set(url, result);
+    }
+
+    // Add failed URLs
+    for (const url of invalidUrls) {
+      extractionResults.set(url, {
+        success: false,
+        error: 'Invalid LinkedIn URL format'
+      });
+    }
+
+    console.log(`Parallel extraction completed: ${extractionResults.size} results`);
+    return extractionResults;
+
+  } catch (error) {
+    console.error('Parallel extraction failed:', error);
+    throw error;
+  }
+};
+
+// Get current API key health status
+export const getApiKeyHealthStatus = (): { total: number; healthy: number; status: ApiKeyHealth[] } => {
+  const allKeys = Array.from(apiKeyHealthMap.values());
+  const healthyKeys = getHealthyApiKeys();
+  
+  return {
+    total: allKeys.length,
+    healthy: healthyKeys.length,
+    status: allKeys.map(key => ({
+      ...key,
+      key: key.key.substring(0, 8) + '...' // Mask the API key for security
+    }))
+  };
 }; 
