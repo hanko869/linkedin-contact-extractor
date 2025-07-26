@@ -584,7 +584,7 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
       individual_reveal: {
         profile_url: linkedinUrl
       },
-      enrichment_level: 'full',  // Full gets both email and phone numbers
+              enrichment_level: 'full',  // Need 'full' to get both emails and phone numbers
       email_options: {
         accept_work: true,
         accept_personal: true
@@ -642,8 +642,8 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
     // Wait for completion
     const revealId = revealResponse.data.id.toString();
     console.log(`Starting to poll for reveal ID: ${revealId}`);
-    const maxWaitTime = 60000; // 1 minute max
-    const pollInterval = 2000; // 2 seconds for faster polling
+    const maxWaitTime = 180000; // 3 minutes max (since extraction can take 2+ minutes)
+    const pollInterval = 3000; // 3 seconds - balanced between speed and API load
     const startTime = Date.now();
 
     while (Date.now() - startTime < maxWaitTime) {
@@ -684,7 +684,7 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
                                  statusData.data?.full_name;
             
             if (failError === 'billing_issue' && hasContactData) {
-              console.warn('Wiza returned billing_issue but provided contact data - proceeding with extraction');
+              // Silently proceed - billing_issue with data is common and not a real error
               // DO NOT throw error - continue processing the data below
             } else if (failError === 'profile_not_found') {
               throw new Error('LinkedIn profile not found. Please check the URL is correct.');
@@ -736,13 +736,24 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
             contact.email,
             contact.work_email,
             contact.personal_email,
-            contact.likely_email,
-            contact.emails?.[0]
+            contact.likely_email
           ];
 
+          // Add individual email fields first
           for (const email of emailFields) {
             if (email && typeof email === 'string' && extractedContact.emails && !extractedContact.emails.includes(email)) {
               extractedContact.emails.push(email);
+            }
+          }
+
+          // Also handle emails array if it exists (similar to phones array)
+          if (contact.emails && Array.isArray(contact.emails)) {
+            for (const emailItem of contact.emails) {
+              // Check if it's a string or object
+              const emailValue = typeof emailItem === 'string' ? emailItem : emailItem?.email;
+              if (emailValue && !extractedContact.emails?.includes(emailValue)) {
+                extractedContact.emails?.push(emailValue);
+              }
             }
           }
 
@@ -794,8 +805,19 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
           console.log('✅ Successfully extracted contact:', {
             name: extractedContact.name,
             emails: extractedContact.emails,
+            emailCount: extractedContact.emails?.length || 0,
             phones: extractedContact.phones,
+            phoneCount: extractedContact.phones?.length || 0,
             location: extractedContact.location
+          });
+
+          // Debug: Log raw email data from API
+          console.log('📧 Raw email data from API:', {
+            email: contact.email,
+            work_email: contact.work_email,
+            personal_email: contact.personal_email,
+            likely_email: contact.likely_email,
+            emails_array: contact.emails
           });
 
           return {
@@ -806,8 +828,8 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
           // Only throw error if the reveal is complete AND failed
           throw new Error('Individual Reveal failed: ' + (statusData.data?.fail_error || statusData.data?.error || 'Unknown error'));
         } else if (statusData.data?.status === 'failed' && statusData.data?.fail_error === 'billing_issue') {
-          // If we see billing_issue but it's not complete yet, log it and keep polling
-          console.warn('Transient billing_issue during processing - continuing to poll...');
+          // If we see billing_issue but it's not complete yet, keep polling silently
+          // This is common and not a real error
         }
 
         // Still processing, wait and try again
@@ -818,7 +840,7 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
       }
     }
 
-    throw new Error('Extraction timed out after 1 minute. Please try again.');
+          throw new Error('Extraction timed out after 3 minutes. The profile might be private or unavailable.');
   }, 'extractContactWithWiza');
 };
 
