@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Contact } from '@/types/contact';
 import { isValidLinkedInUrl, extractContactFromLinkedIn } from '@/utils/extraction';
+import { extractContactsInParallel } from '@/utils/wiza';
 import { saveContact, getStoredContacts, clearStoredContacts } from '@/utils/storage';
 import { generateCSV, downloadCSV } from '@/utils/csv';
 import { useLanguage, interpolate } from '@/contexts/LanguageContext';
@@ -69,7 +70,7 @@ const ContactExtractor: React.FC = () => {
     }
 
     setIsExtracting(true);
-    showFeedback('info', t.feedback.extracting + ' (This may take up to 2 minutes...)');
+    showFeedback('info', t.feedback.extracting);
 
     try {
       const result = await extractContactFromLinkedIn(linkedinUrl);

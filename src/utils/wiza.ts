@@ -390,7 +390,7 @@ const createWizaList = async (linkedinUrl: string): Promise<WizaListResponse> =>
   const payload = {
     list: {
       name: listName,
-      enrichment_level: 'full',  // Changed to 'full' to get phone numbers
+      enrichment_level: 'partial',  // Partial is faster
       email_options: {
         accept_work: true,
         accept_personal: true,
@@ -569,7 +569,7 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
       individual_reveal: {
         profile_url: linkedinUrl
       },
-      enrichment_level: 'full',
+      enrichment_level: 'partial',  // Partial is faster
       email_options: {
         accept_work: true,
         accept_personal: true
@@ -627,8 +627,8 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
     // Wait for completion
     const revealId = revealResponse.data.id.toString();
     console.log(`Starting to poll for reveal ID: ${revealId}`);
-    const maxWaitTime = 180000; // 3 minutes
-    const pollInterval = 5000; // 5 seconds
+    const maxWaitTime = 60000; // 1 minute max
+    const pollInterval = 2000; // 2 seconds for faster polling
     const startTime = Date.now();
 
     while (Date.now() - startTime < maxWaitTime) {
@@ -794,7 +794,7 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
       }
     }
 
-    throw new Error('Individual Reveal timed out after 3 minutes');
+    throw new Error('Extraction timed out after 1 minute. Please try again.');
   }, 'extractContactWithWiza');
 };
 
@@ -811,7 +811,7 @@ const createIndividualReveal = async (linkedinUrl: string): Promise<any> => {
     individual_reveal: {
       profile_url: linkedinUrl
     },
-    enrichment_level: 'full', // Try full instead of partial
+    enrichment_level: 'partial', // Partial is faster
     email_options: {
       accept_work: true,
       accept_personal: true
@@ -1250,7 +1250,7 @@ export const extractContactsInParallel = async (linkedinUrls: string[]): Promise
         individual_reveal: {
           profile_url: linkedinUrl
         },
-        enrichment_level: 'full',
+        enrichment_level: 'partial',  // Partial is faster
         email_options: {
           accept_work: true,
           accept_personal: true
