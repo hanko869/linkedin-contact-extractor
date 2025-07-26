@@ -144,8 +144,8 @@ async function executeWithFailover<T>(
       }
       
       // If this is a billing issue, stop immediately - don't retry with other keys
-      if (error.message?.includes('billing')) {
-        console.error('Billing issue detected - stopping all retries');
+      if (error.message?.includes('Wiza account has a billing issue')) {
+        console.error('Billing account issue detected - stopping all retries');
         throw new Error('Wiza account has a billing issue. Please check your Wiza account at https://wiza.co');
       }
       
@@ -405,7 +405,7 @@ const createWizaList = async (linkedinUrl: string): Promise<WizaListResponse> =>
   const payload = {
     list: {
       name: listName,
-      enrichment_level: 'partial',  // Partial is faster
+      enrichment_level: 'full',  // Full gets both email and phone numbers
       email_options: {
         accept_work: true,
         accept_personal: true,
@@ -584,7 +584,7 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
       individual_reveal: {
         profile_url: linkedinUrl
       },
-      enrichment_level: 'partial',  // Partial is faster
+      enrichment_level: 'full',  // Full gets both email and phone numbers
       email_options: {
         accept_work: true,
         accept_personal: true
@@ -758,12 +758,21 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
             contact.mobile_phone,
             contact.work_phone,
             contact.personal_phone,
-            contact.phones?.[0]
+            contact.phones?.[0]?.number  // phones array contains objects with 'number' property
           ];
 
           for (const phone of phoneFields) {
             if (phone && typeof phone === 'string' && extractedContact.phones && !extractedContact.phones.includes(phone)) {
               extractedContact.phones.push(phone);
+            }
+          }
+
+          // Also extract all phones from the phones array if it exists
+          if (contact.phones && Array.isArray(contact.phones)) {
+            for (const phoneObj of contact.phones) {
+              if (phoneObj.number && !extractedContact.phones?.includes(phoneObj.number)) {
+                extractedContact.phones?.push(phoneObj.number);
+              }
             }
           }
 
@@ -826,7 +835,7 @@ const createIndividualReveal = async (linkedinUrl: string): Promise<any> => {
     individual_reveal: {
       profile_url: linkedinUrl
     },
-    enrichment_level: 'partial', // Partial is faster
+    enrichment_level: 'full', // Full gets both email and phone numbers
     email_options: {
       accept_work: true,
       accept_personal: true
@@ -1197,7 +1206,7 @@ export const createProspectList = async (
     list: {
       name: listName,
       max_profiles: maxProfiles,
-      enrichment_level: 'partial',
+      enrichment_level: 'full',
       email_options: {
         accept_work: true,
         accept_personal: true,
@@ -1265,7 +1274,7 @@ export const extractContactsInParallel = async (linkedinUrls: string[]): Promise
         individual_reveal: {
           profile_url: linkedinUrl
         },
-        enrichment_level: 'partial',  // Partial is faster
+        enrichment_level: 'full',  // Full gets both email and phone numbers
         email_options: {
           accept_work: true,
           accept_personal: true
