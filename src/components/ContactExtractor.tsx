@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Contact } from '@/types/contact';
-import { isValidLinkedInUrl, extractContactFromLinkedIn, checkAPIConfiguration } from '@/utils/extraction';
+import { isValidLinkedInUrl, extractContactFromLinkedIn } from '@/utils/extraction';
 import { saveContact, getStoredContacts, clearStoredContacts } from '@/utils/storage';
 import { generateCSV, downloadCSV } from '@/utils/csv';
 import { useLanguage, interpolate } from '@/contexts/LanguageContext';
@@ -15,20 +15,22 @@ const ContactExtractor: React.FC = () => {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info' | 'warning'; message: string } | null>(null);
   const [apiConfigured, setApiConfigured] = useState<boolean | null>(null);
   const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number } | null>(null);
+  const [hasExtractError, setHasExtractError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Configuration constants
   const MAX_BULK_URLS = 500; // Increased from 100, max API limit is 2500
   const DELAY_BETWEEN_REQUESTS = 2000; // 2 seconds delay to avoid rate limiting
 
-  // Load contacts from localStorage and check API configuration on component mount
+  // Load contacts from localStorage on component mount
   useEffect(() => {
     setContacts(getStoredContacts());
+    // Assume API is configured - we'll handle errors when actually extracting
+    setApiConfigured(true);
     
-    // Check API configuration for Wiza
-    checkAPIConfiguration().then(configured => {
-      setApiConfigured(configured);
-    });
+    // Debug: Log initial state
+    console.log('ContactExtractor mounted. Initial linkedinUrl:', linkedinUrl);
+    console.log('Is extracting:', isExtracting);
   }, []);
 
   const showFeedback = (type: 'success' | 'error' | 'info' | 'warning', message: string) => {
@@ -37,6 +39,19 @@ const ContactExtractor: React.FC = () => {
   };
 
   const handleExtractContact = async () => {
+    console.log('handleExtractContact called with URL:', linkedinUrl);
+    
+    // Prevent multiple simultaneous extractions
+    if (isExtracting) {
+      console.log('Extraction already in progress, ignoring request');
+      return;
+    }
+
+    // Reset error state when trying again
+    if (hasExtractError) {
+      setHasExtractError(false);
+    }
+
     if (!linkedinUrl.trim()) {
       showFeedback('error', t.feedback.enterUrl);
       return;
@@ -54,7 +69,7 @@ const ContactExtractor: React.FC = () => {
     }
 
     setIsExtracting(true);
-    showFeedback('info', t.feedback.extracting);
+    showFeedback('info', t.feedback.extracting + ' (This may take up to 2 minutes...)');
 
     try {
       const result = await extractContactFromLinkedIn(linkedinUrl);
@@ -89,9 +104,16 @@ const ContactExtractor: React.FC = () => {
       } else {
         showFeedback('error', result.error || t.feedback.failedExtract);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Contact extraction error:', error);
-      showFeedback('error', t.feedback.unexpectedError);
+      
+      // Check for billing issue to prevent infinite retries
+      if (error.message?.includes('billing')) {
+        setHasExtractError(true);
+        showFeedback('error', 'Billing issue detected. Please check your Wiza account at https://wiza.co');
+      } else {
+        showFeedback('error', error.message || t.feedback.unexpectedError);
+      }
     } finally {
       setIsExtracting(false);
     }
@@ -312,7 +334,7 @@ const ContactExtractor: React.FC = () => {
               </div>
               <button
                 onClick={handleExtractContact}
-                disabled={isExtracting || (apiConfigured === false)}
+                disabled={isExtracting || (apiConfigured === false) || hasExtractError}
                 className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-2xl font-semibold hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center min-w-[200px]"
               >
                 {isExtracting && !bulkProgress ? (
@@ -504,7 +526,7 @@ const ContactExtractor: React.FC = () => {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                                 </svg>
                                 <span>{phone}</span>
-                                {index === 0 && contact.phones && contact.phones.length > 1 && (
+                                                                {index === 0 && contact.phones && contact.phones.length > 1 && (
                                   <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full">{t.contacts.primary}</span>
                                 )}
                               </div>

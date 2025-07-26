@@ -15,7 +15,36 @@ export const saveContact = (contact: Contact): void => {
 export const getStoredContacts = (): Contact[] => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    if (!stored) return [];
+    
+    const contacts: Contact[] = JSON.parse(stored);
+    
+    // Clean up any contacts that might have email/phone as objects
+    return contacts.map(contact => ({
+      ...contact,
+      // Ensure emails array contains only strings
+      emails: contact.emails?.map(email => 
+        typeof email === 'object' && email !== null && 'email' in email 
+          ? (email as any).email 
+          : String(email)
+      ).filter(email => email && email !== 'undefined' && email !== 'null') || [],
+      
+      // Ensure phones array contains only strings
+      phones: contact.phones?.map(phone => 
+        typeof phone === 'object' && phone !== null && 'phone' in phone 
+          ? (phone as any).phone 
+          : String(phone)
+      ).filter(phone => phone && phone !== 'undefined' && phone !== 'null') || [],
+      
+      // Ensure email and phone are strings
+      email: typeof contact.email === 'object' && contact.email !== null && 'email' in contact.email
+        ? (contact.email as any).email
+        : (contact.email || ''),
+      
+      phone: typeof contact.phone === 'object' && contact.phone !== null && 'phone' in contact.phone
+        ? (contact.phone as any).phone
+        : (contact.phone || '')
+    }));
   } catch (error) {
     console.error('Error retrieving contacts from localStorage:', error);
     return [];

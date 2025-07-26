@@ -7,6 +7,10 @@ const API_KEYS = [
   process.env.WIZA_API_KEY_2 || '2ac8378b7aa63804c7d7a57d7e9777600325895beb8410022529c70132bbf61b'
 ].filter(key => key && key.length > 0);
 
+// Check if we're in development without proper API keys
+const isDevelopment = process.env.NODE_ENV === 'development';
+const hasRealApiKeys = process.env.WIZA_API_KEY || process.env.WIZA_API_KEY_2;
+
 // API Key health tracking
 interface ApiKeyHealth {
   key: string;
@@ -112,15 +116,28 @@ async function executeWithFailover<T>(
       markApiKeySuccess(keyHealth.key);
       return result;
     } catch (error: any) {
-      console.error(`${operationName} failed with API key index ${keyHealth.index}:`, error.message);
+      console.warn(`${operationName} failed with API key index ${keyHealth.index}:`, error.message || error);
       markApiKeyFailed(keyHealth.key);
       lastError = error;
       
       // Check if this is a credits/quota error
       if (error.message?.includes('credits') || 
           error.message?.includes('quota') || 
-          error.message?.includes('limit')) {
+          error.message?.includes('limit') ||
+          error.message?.includes('402')) {
         console.log(`API key index ${keyHealth.index} appears to be out of credits`);
+      }
+      
+      // If this is a billing issue, stop immediately - don't retry with other keys
+      if (error.message?.includes('billing')) {
+        console.error('Billing issue detected - stopping all retries');
+        throw new Error('Wiza account has a billing issue. Please check your Wiza account at https://wiza.co');
+      }
+      
+      // If this is a network error, don't try other keys
+      if (error.message?.includes('fetch failed') || 
+          error.message?.includes('ECONNREFUSED')) {
+        throw new Error('Network error - please check your internet connection');
       }
     }
   }
@@ -194,7 +211,13 @@ export const checkWizaCredits = async (): Promise<any> => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Failed to check credits:', { status: response.status, error: errorText });
+      console.warn('Failed to check credits:', { status: response.status });
+      
+      // Don't throw for 402 (payment required) - just return null
+      if (response.status === 402) {
+        return { credits: { email_credits: 0, phone_credits: 0, api_credits: 0 } };
+      }
+      
       throw new Error(`Credit check failed: ${response.status}`);
     }
 
@@ -534,36 +557,8 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
   console.log('Starting Wiza contact extraction for:', linkedinUrl);
   console.log('📱 IMPORTANT: Using Individual Reveal API for complete contact data (including phone numbers)');
   
-  // Check available credits across all healthy API keys
-  let hasCredits = false;
-  try {
-    const credits = await checkWizaCredits();
-    if (credits && credits.credits) {
-      console.log('Available Wiza credits:', {
-        email_credits: credits.credits.email_credits,
-        phone_credits: credits.credits.phone_credits,
-        api_credits: credits.credits.api_credits
-      });
-      
-      // Check if user has phone credits
-      if (credits.credits.phone_credits === 0 || credits.credits.phone_credits === '0') {
-        console.warn('⚠️ WARNING: You have 0 phone credits. Phone numbers will not be returned.');
-        console.warn('⚠️ To get phone numbers, you need to add phone credits to your Wiza account.');
-      }
-      
-      hasCredits = credits.credits.api_credits > 0 || credits.credits.email_credits > 0;
-    }
-  } catch (error) {
-    console.error('Failed to check credits, proceeding with extraction anyway:', error);
-    hasCredits = true; // Proceed anyway in case it's just a credit check issue
-  }
-
-  if (!hasCredits) {
-    return {
-      success: false,
-      error: 'No credits available across all API keys. Please add credits to your Wiza account.'
-    };
-  }
+  // Skip credit check during extraction to avoid API spam
+  // Credits will be checked implicitly when we try to create the reveal
 
   // Use failover system for the extraction
   return executeWithFailover(async (apiKey) => {
@@ -583,35 +578,55 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
 
     console.log('Creating Individual Reveal with payload:', JSON.stringify(payload, null, 2));
 
+    console.log('Making API request to:', `${baseUrl}/api/individual_reveals`);
+    console.log('Using API key (first 10 chars):', apiKey.substring(0, 10) + '...');
+    
     const response = await fetch(`${baseUrl}/api/individual_reveals`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       body: JSON.stringify(payload)
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Individual Reveal creation failed:', { 
-        status: response.status, 
-        error: errorText
-      });
-      
-      // Check for specific error conditions
-      if (errorText.includes('credits') || errorText.includes('quota')) {
-        throw new Error(`API key out of credits: ${response.status}`);
+          if (!response.ok) {
+        const errorText = await response.text();
+        console.warn('Individual Reveal creation failed:', { 
+          status: response.status,
+          statusText: response.statusText,
+          errorBody: errorText
+        });
+        
+        // Check for specific error conditions
+        if (response.status === 402 || errorText.includes('credits') || errorText.includes('quota')) {
+          throw new Error(`API key out of credits`);
+        }
+        
+        if (response.status === 401) {
+          throw new Error(`Invalid API key`);
+        }
+        
+        if (response.status === 403) {
+          throw new Error(`Access forbidden - check API permissions`);
+        }
+        
+        // Parse error message if possible
+        try {
+          const errorJson = JSON.parse(errorText);
+          throw new Error(errorJson.message || errorJson.error || `API error: ${response.status}`);
+        } catch {
+          throw new Error(`API error ${response.status}: ${errorText.substring(0, 100)}`);
+        }
       }
-      
-      throw new Error(`Failed to create individual reveal: ${response.status} ${errorText}`);
-    }
 
     const revealResponse = await response.json();
-    console.log('Individual Reveal created:', revealResponse);
+    console.log('Individual Reveal created:', JSON.stringify(revealResponse, null, 2));
     
     // Wait for completion
     const revealId = revealResponse.data.id.toString();
+    console.log(`Starting to poll for reveal ID: ${revealId}`);
     const maxWaitTime = 180000; // 3 minutes
     const pollInterval = 5000; // 5 seconds
     const startTime = Date.now();
@@ -632,15 +647,58 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
         }
 
         const statusData = await statusResponse.json();
-        console.log('Reveal status:', statusData.data?.status);
+        console.log('Reveal status check:', {
+          status: statusData.data?.status,
+          is_complete: statusData.data?.is_complete,
+          fail_error: statusData.data?.fail_error,
+          id: statusData.data?.id
+        });
 
-        if (statusData.data?.status === 'finished') {
+        if (statusData.data?.is_complete === true) {
+          console.log('Individual Reveal completed. Full data:', JSON.stringify(statusData.data, null, 2));
+          
+          // Check if the reveal failed but also check if we have data
+          if (statusData.data?.status === 'failed') {
+            const failError = statusData.data?.fail_error || 'Unknown error';
+            console.error('Reveal marked as failed:', failError);
+            
+            // IMPORTANT: Check if we actually have contact data despite the "failed" status
+            // Wiza sometimes returns data even with billing_issue status
+            const hasContactData = statusData.data?.email || statusData.data?.phone_number || 
+                                 statusData.data?.mobile_phone || statusData.data?.name ||
+                                 statusData.data?.full_name;
+            
+            if (failError === 'billing_issue' && hasContactData) {
+              console.warn('Wiza returned billing_issue but provided contact data - proceeding with extraction');
+              // DO NOT throw error - continue processing the data below
+            } else if (failError === 'profile_not_found') {
+              throw new Error('LinkedIn profile not found. Please check the URL is correct.');
+            } else if (failError === 'profile_private') {
+              throw new Error('LinkedIn profile is private and cannot be accessed.');
+            } else if (failError === 'billing_issue' && !hasContactData) {
+              console.error('Wiza API returned billing_issue with no data. This could mean:');
+              console.error('1. Your Wiza account is on a limited plan');
+              console.error('2. This specific profile requires a higher-tier Wiza plan');
+              console.error('3. You\'ve hit a rate limit');
+              console.error('Full error data:', statusData.data);
+              throw new Error('Wiza API limitation: This profile cannot be extracted with your current Wiza plan. Try a different profile or upgrade your Wiza account.');
+            } else if (!hasContactData) {
+              throw new Error(`Failed to extract contact: ${failError}`);
+            } else {
+              console.warn(`Reveal marked as failed with ${failError} but has data - continuing`);
+            }
+          }
+
           console.log('✅ Individual Reveal completed successfully!');
           console.log('Raw API response:', JSON.stringify(statusData, null, 2));
 
-          const contact = statusData.data?.contact;
-          if (!contact) {
-            throw new Error('No contact data in response');
+          // The contact data is directly in statusData.data
+          const contact = statusData.data;
+          
+          // Check if we have any useful data
+          if (!contact.email && !contact.mobile_phone && !contact.phone_number && !contact.name) {
+            console.error('No contact information found in profile');
+            throw new Error('No contact information available for this profile');
           }
 
           // Extract contact information
@@ -668,7 +726,7 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
           ];
 
           for (const email of emailFields) {
-            if (email && extractedContact.emails && !extractedContact.emails.includes(email)) {
+            if (email && typeof email === 'string' && extractedContact.emails && !extractedContact.emails.includes(email)) {
               extractedContact.emails.push(email);
             }
           }
@@ -689,7 +747,7 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
           ];
 
           for (const phone of phoneFields) {
-            if (phone && extractedContact.phones && !extractedContact.phones.includes(phone)) {
+            if (phone && typeof phone === 'string' && extractedContact.phones && !extractedContact.phones.includes(phone)) {
               extractedContact.phones.push(phone);
             }
           }
@@ -720,8 +778,12 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
             success: true,
             contact: extractedContact
           };
-        } else if (statusData.data?.status === 'failed') {
-          throw new Error('Individual Reveal failed: ' + (statusData.data?.error || 'Unknown error'));
+        } else if (statusData.data?.status === 'failed' && statusData.data?.is_complete === true) {
+          // Only throw error if the reveal is complete AND failed
+          throw new Error('Individual Reveal failed: ' + (statusData.data?.fail_error || statusData.data?.error || 'Unknown error'));
+        } else if (statusData.data?.status === 'failed' && statusData.data?.fail_error === 'billing_issue') {
+          // If we see billing_issue but it's not complete yet, log it and keep polling
+          console.warn('Transient billing_issue during processing - continuing to poll...');
         }
 
         // Still processing, wait and try again

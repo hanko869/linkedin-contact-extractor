@@ -17,5 +17,9 @@ const ContactExtractor = dynamic(() => import('./ContactExtractor'), {
 });
 
 export default function ContactExtractorWrapper() {
-  return <ContactExtractor />;
+  return (
+    <LanguageProvider>
+      <ContactExtractor />
+    </LanguageProvider>
+  );
 } 
