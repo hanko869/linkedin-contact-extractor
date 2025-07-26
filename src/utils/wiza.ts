@@ -31,9 +31,12 @@ API_KEYS.forEach((key, index) => {
     index,
     isHealthy: true,
     lastChecked: 0,
-    consecutiveFailures: 0
+    consecutiveFailures: 0,
+    credits: 0
   });
 });
+
+
 
 // Health check interval (5 minutes)
 const HEALTH_CHECK_INTERVAL = 5 * 60 * 1000;
@@ -59,12 +62,15 @@ const markApiKeyFailed = (apiKey: string) => {
 };
 
 // Mark API key as successful
-const markApiKeySuccess = (apiKey: string) => {
+const markApiKeySuccess = (apiKey: string, credits?: number) => {
   const health = apiKeyHealthMap.get(apiKey);
   if (health) {
     health.consecutiveFailures = 0;
     health.isHealthy = true;
     health.lastChecked = Date.now();
+    if (credits !== undefined) {
+      health.credits = credits;
+    }
   }
 };
 
@@ -91,7 +97,16 @@ const getBestApiKey = (): string | null => {
     return null;
   }
 
-  // Use the API key with the least recent usage
+  // Prefer API keys with credits
+  const keysWithCredits = healthyKeys.filter(k => k.credits && k.credits > 0);
+  if (keysWithCredits.length > 0) {
+    // Use the key with most credits
+    keysWithCredits.sort((a, b) => (b.credits || 0) - (a.credits || 0));
+    console.log(`Using API key index ${keysWithCredits[0].index} with ${keysWithCredits[0].credits} credits`);
+    return keysWithCredits[0].key;
+  }
+
+  // If no keys have cached credit info, use the least recently used
   healthyKeys.sort((a, b) => a.lastChecked - b.lastChecked);
   return healthyKeys[0].key;
 };
