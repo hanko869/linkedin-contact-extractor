@@ -20,8 +20,9 @@ const ContactExtractor: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Configuration constants
-  const MAX_BULK_URLS = 500; // Increased from 100, max API limit is 2500
-  const DELAY_BETWEEN_REQUESTS = 2000; // 2 seconds delay to avoid rate limiting
+  const API_CONFIG_CHECK_INTERVAL = 30000; // 30 seconds
+  const MAX_BULK_URLS = 500; // Maximum URLs for bulk extraction
+  // Parallel processing uses multiple API keys simultaneously, no delay needed
 
   // Load contacts from localStorage on component mount
   useEffect(() => {
@@ -193,46 +194,55 @@ const ContactExtractor: React.FC = () => {
       setIsExtracting(true);
       setBulkProgress({ current: 0, total: validUrls.length });
 
-      // Process URLs in batches using individual reveals
-      const extractedContacts: Contact[] = [];
-      let successCount = 0;
-      let failedCount = 0;
-
-      for (let i = 0; i < validUrls.length; i++) {
-        setBulkProgress({ current: i + 1, total: validUrls.length });
+      // Use parallel extraction for bulk URLs
+      try {
+        console.log(`Starting parallel extraction for ${validUrls.length} URLs using all available API keys`);
+        showFeedback('info', `🚀 Processing ${validUrls.length} URLs in parallel for faster extraction...`);
         
-        try {
-          const result = await extractContactFromLinkedIn(validUrls[i]);
+        const results = await extractContactsInParallel(validUrls);
+        const extractedContacts: Contact[] = [];
+        let successCount = 0;
+        let failedCount = 0;
+
+        results.forEach((result, url) => {
+          setBulkProgress({ 
+            current: Math.min(results.size, validUrls.length), 
+            total: validUrls.length 
+          });
+          
           if (result.success && result.contact) {
             extractedContacts.push(result.contact);
             saveContact(result.contact);
             successCount++;
           } else {
             failedCount++;
+            console.error(`Failed to extract ${url}:`, result.error);
           }
-        } catch (error) {
-          console.error(`Failed to extract contact from ${validUrls[i]}:`, error);
-          failedCount++;
-        }
-        
-        // Add a small delay between requests to avoid rate limiting
-        if (i < validUrls.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_REQUESTS));
-        }
-      }
+        });
 
-      // Force refresh contacts from storage
-      const updatedContacts = getStoredContacts();
-      console.log('Bulk extraction complete. Total contacts in storage:', updatedContacts.length);
-      console.log('Sample contact with phone:', updatedContacts.find(c => c.phones && c.phones.length > 0));
-      setContacts([...updatedContacts]); // Force new array reference for React update
-      
-      let message = interpolate(t.feedback.bulkSuccess, { success: successCount });
-      if (failedCount > 0) {
-        message += ` ${interpolate(t.feedback.bulkPartialFail, { failed: failedCount })}`;
+        // Update the contacts state with all new contacts
+        setContacts(prevContacts => {
+          const allContacts = [...prevContacts, ...extractedContacts];
+          // Remove duplicates based on linkedinUrl
+          const uniqueContacts = allContacts.filter((contact, index, self) =>
+            index === self.findIndex((c) => c.linkedinUrl === contact.linkedinUrl)
+          );
+          return uniqueContacts;
+        });
+
+        if (successCount > 0) {
+          showFeedback('success', `✅ Successfully extracted ${successCount} contacts${failedCount > 0 ? `, ${failedCount} failed` : ''}`);
+        } else {
+          showFeedback('error', `Failed to extract any contacts from ${failedCount} URLs`);
+        }
+
+      } catch (error) {
+        console.error('Bulk extraction error:', error);
+        showFeedback('error', `Bulk extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        setIsExtracting(false);
+        setBulkProgress(null);
       }
-      
-      showFeedback('success', message);
 
     } catch (error) {
       console.error('File upload error:', error);

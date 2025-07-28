@@ -7,6 +7,11 @@ const API_KEYS = [
   process.env.WIZA_API_KEY_2 || '2ac8378b7aa63804c7d7a57d7e9777600325895beb8410022529c70132bbf61b'
 ].filter(key => key && key.length > 0);
 
+console.log(`🔑 Initialized with ${API_KEYS.length} Wiza API keys`);
+API_KEYS.forEach((key, index) => {
+  console.log(`  API Key ${index + 1}: ${key.substring(0, 10)}...${key.substring(key.length - 5)}`);
+});
+
 // Check if we're in development without proper API keys
 const isDevelopment = process.env.NODE_ENV === 'development';
 const hasRealApiKeys = process.env.WIZA_API_KEY || process.env.WIZA_API_KEY_2;
@@ -710,19 +715,16 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
           // The contact data is directly in statusData.data
           const contact = statusData.data;
           
-          // Check if we have any useful data
-          if (!contact.email && !contact.mobile_phone && !contact.phone_number && !contact.name) {
-            console.error('No contact information found in profile');
-            throw new Error('No contact information available for this profile');
-          }
-
+          // Debug the entire contact object to see all fields
+          console.log('🔍 Full contact data from Wiza API:', JSON.stringify(contact, null, 2));
+          
           // Extract contact information
           const extractedContact: Contact = {
             id: generateContactId(),
             linkedinUrl: linkedinUrl,
             name: contact.full_name || contact.name || 'Unknown',
-            jobTitle: contact.job_title || contact.headline || '',
-            company: contact.job_company_name || contact.company || '',
+            jobTitle: contact.title || contact.job_title || contact.headline || contact.position || '',
+            company: contact.company || contact.job_company_name || contact.organization || '',
             location: contact.location || '',
             email: contact.email || '',
             emails: [],
@@ -994,6 +996,9 @@ export const extractContactWithWizaIndividual = async (linkedinUrl: string): Pro
             enrichmentLevel: status.data.enrichment_level
           });
 
+          // Debug: Log all available fields
+          console.log('🔍 Full individual reveal data:', JSON.stringify(status.data, null, 2));
+
           // Extract contact information directly from reveal data
           const contact: Contact = {
             id: generateContactId(),
@@ -1004,8 +1009,8 @@ export const extractContactWithWizaIndividual = async (linkedinUrl: string): Pro
             phone: allPhones[0], // Primary phone for backward compatibility
             phones: allPhones.length > 0 ? allPhones : undefined,
             extractedAt: new Date().toISOString(),
-            jobTitle: status.data.title,
-            company: status.data.company,
+            jobTitle: status.data.title || status.data.job_title || status.data.headline || status.data.position || '',
+            company: status.data.company || status.data.job_company_name || status.data.organization || '',
             location: status.data.location
           };
 
@@ -1354,8 +1359,8 @@ export const extractContactsInParallel = async (linkedinUrls: string[]): Promise
               id: generateContactId(),
               linkedinUrl: linkedinUrl,
               name: contact.full_name || contact.name || 'Unknown',
-              jobTitle: contact.job_title || contact.headline || '',
-              company: contact.job_company_name || contact.company || '',
+              jobTitle: contact.title || contact.job_title || contact.headline || contact.position || '',
+              company: contact.company || contact.job_company_name || contact.organization || '',
               location: contact.location || '',
               email: '',
               emails: [],

@@ -23,18 +23,20 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    // TEMPORARILY DISABLED FOR TESTING - UNCOMMENT IN PRODUCTION
-    // Check if user is authenticated
-    // const user = await getUser();
-    // if (!user) {
-    //   return NextResponse.json(
-    //     { error: 'Authentication required' },
-    //     { status: 401 }
-    //   );
+    // Temporarily disable auth for testing
+    // const authHeader = request.headers.get('authorization');
+    // if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    //   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     // }
 
-    // For testing, use a mock user
-    const user = { id: 'test-user', username: 'test' };
+    // const token = authHeader.split(' ')[1];
+    // const { userId } = await verifyAuthToken(token);
+    // if (!userId) {
+    //   return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    // }
+    
+    // For testing: use a placeholder UUID instead of "test-user"
+    const userId = '00000000-0000-0000-0000-000000000000'; // Placeholder UUID for testing
 
     const { linkedinUrl } = await request.json();
     
@@ -63,7 +65,7 @@ export async function POST(request: NextRequest) {
     if (result.success && result.contact) {
       try {
         const { saveExtractedContact } = await import('@/utils/userDb');
-        await saveExtractedContact(user.id, {
+        await saveExtractedContact(userId, {
           name: result.contact.name,
           title: result.contact.jobTitle || '',
           company: result.contact.company || '',
@@ -79,8 +81,8 @@ export async function POST(request: NextRequest) {
 
     // Log the extraction activity
     await logActivity({
-      user_id: user.id,
-      username: user.username,
+      user_id: userId,
+      username: 'test', // Placeholder username for testing
       action: 'extract_contact',
       linkedin_url: linkedinUrl,
       contact_name: result.contact?.name,
