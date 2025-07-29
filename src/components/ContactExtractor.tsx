@@ -199,22 +199,18 @@ const ContactExtractor: React.FC = () => {
         console.log(`Starting parallel extraction for ${validUrls.length} URLs using all available API keys`);
         showFeedback('info', `🚀 Processing ${validUrls.length} URLs in parallel for faster extraction...`);
         
-        const results = await extractContactsInParallel(validUrls);
+        const results = await extractContactsInParallel(validUrls, (current, total) => {
+          setBulkProgress({ current, total });
+        });
+        
         console.log(`Parallel extraction completed. Results size: ${results.size}`);
         
         const extractedContacts: Contact[] = [];
         let successCount = 0;
         let failedCount = 0;
-        let currentProgress = 0;
 
         // Iterate through the results Map properly
         results.forEach((result, url) => {
-          currentProgress++;
-          setBulkProgress({ 
-            current: currentProgress, 
-            total: validUrls.length 
-          });
-          
           if (result.success && result.contact) {
             extractedContacts.push(result.contact);
             saveContact(result.contact);

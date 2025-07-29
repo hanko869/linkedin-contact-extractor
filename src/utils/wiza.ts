@@ -168,7 +168,8 @@ async function executeWithFailover<T>(
 // Execute operations in parallel with multiple API keys
 async function executeInParallel<T>(
   linkedinUrls: string[],
-  operation: (url: string, apiKey: string) => Promise<T>
+  operation: (url: string, apiKey: string) => Promise<T>,
+  onProgress?: (current: number, total: number) => void
 ): Promise<Map<string, T>> {
   const results = new Map<string, T>();
   const healthyKeys = getHealthyApiKeys();
@@ -177,11 +178,12 @@ async function executeInParallel<T>(
     throw new Error('No healthy API keys available');
   }
 
-  // Create a queue of URLs to process
   const urlQueue = [...linkedinUrls];
   const processingPromises: Promise<void>[] = [];
+  let completedCount = 0;
+  const totalCount = linkedinUrls.length;
 
-  // Process URLs in parallel using all healthy API keys
+  // Process URLs with each healthy API key
   for (const keyHealth of healthyKeys) {
     const processWithKey = async () => {
       while (urlQueue.length > 0) {
@@ -193,6 +195,12 @@ async function executeInParallel<T>(
           const result = await operation(url, keyHealth.key);
           results.set(url, result);
           markApiKeySuccess(keyHealth.key);
+          
+          // Update progress
+          completedCount++;
+          if (onProgress) {
+            onProgress(completedCount, totalCount);
+          }
         } catch (error: any) {
           console.error(`Failed to process ${url} with API key index ${keyHealth.index}:`, error.message);
           markApiKeyFailed(keyHealth.key);
@@ -201,6 +209,11 @@ async function executeInParallel<T>(
           if (getHealthyApiKeys().length > 0) {
             urlQueue.push(url);
           } else {
+            // Update progress even for failed URLs
+            completedCount++;
+            if (onProgress) {
+              onProgress(completedCount, totalCount);
+            }
             throw new Error(`Failed to process ${url}: All API keys exhausted`);
           }
         }
@@ -1270,7 +1283,10 @@ export const createProspectList = async (
 }; 
 
 // Bulk extraction with parallel processing using multiple API keys
-export const extractContactsInParallel = async (linkedinUrls: string[]): Promise<Map<string, ExtractionResult>> => {
+export const extractContactsInParallel = async (
+  linkedinUrls: string[],
+  onProgress?: (current: number, total: number) => void
+): Promise<Map<string, ExtractionResult>> => {
   console.log(`Starting parallel extraction for ${linkedinUrls.length} LinkedIn URLs`);
   console.log(`Available healthy API keys: ${getHealthyApiKeys().length}`);
   
@@ -1292,7 +1308,7 @@ export const extractContactsInParallel = async (linkedinUrls: string[]): Promise
   }
 
   try {
-    // Use the parallel processing system
+    // Use the parallel processing system with progress tracking
     const results = await executeInParallel(validUrls, async (linkedinUrl, apiKey) => {
       const baseUrl = process.env.WIZA_BASE_URL || 'https://wiza.co';
 
@@ -1456,7 +1472,7 @@ export const extractContactsInParallel = async (linkedinUrls: string[]): Promise
         success: false,
         error: 'Extraction timed out'
       };
-    });
+    }, onProgress); // Pass onProgress to executeInParallel
 
     // Convert Map to extraction results
     const extractionResults = new Map<string, ExtractionResult>();
