@@ -8,9 +8,7 @@ const API_KEYS = [
 ].filter(key => key && key.length > 0);
 
 console.log(`🔑 Initialized with ${API_KEYS.length} Wiza API keys`);
-API_KEYS.forEach((key, index) => {
-  console.log(`  API Key ${index + 1}: ${key.substring(0, 10)}...${key.substring(key.length - 5)}`);
-});
+// Don't log API keys for security
 
 // Check if we're in development without proper API keys
 const isDevelopment = process.env.NODE_ENV === 'development';
@@ -92,7 +90,7 @@ const getBestApiKey = (): string | null => {
     if (shouldRecheckApiKey(health)) {
       health.isHealthy = true;
       health.consecutiveFailures = 0;
-      console.log(`Re-enabling API key index ${health.index} for health check`);
+      // Removed verbose logging for security
     }
   }
 
@@ -105,9 +103,9 @@ const getBestApiKey = (): string | null => {
   // Prefer API keys with credits
   const keysWithCredits = healthyKeys.filter(k => k.credits && k.credits > 0);
   if (keysWithCredits.length > 0) {
-    // Use the key with most credits
+    // Sort by most credits first
     keysWithCredits.sort((a, b) => (b.credits || 0) - (a.credits || 0));
-    console.log(`Using API key index ${keysWithCredits[0].index} with ${keysWithCredits[0].credits} credits`);
+    // Don't log which API key is being used for security
     return keysWithCredits[0].key;
   }
 
@@ -131,7 +129,7 @@ async function executeWithFailover<T>(
   
   for (const keyHealth of healthyKeys) {
     try {
-      console.log(`Attempting ${operationName} with API key index ${keyHealth.index}`);
+      // Don't log which API key is being used for security
       const result = await operation(keyHealth.key);
       markApiKeySuccess(keyHealth.key);
       return result;
@@ -145,7 +143,9 @@ async function executeWithFailover<T>(
           error.message?.includes('quota') || 
           error.message?.includes('limit') ||
           error.message?.includes('402')) {
-        console.log(`API key index ${keyHealth.index} appears to be out of credits`);
+        // Mark this key as unhealthy due to lack of credits
+        markApiKeyFailed(keyHealth.key);
+        // Don't log API key details for security
       }
       
       // If this is a billing issue, stop immediately - don't retry with other keys
@@ -191,7 +191,7 @@ async function executeInParallel<T>(
         if (!url) break;
 
         try {
-          console.log(`Processing ${url} with API key index ${keyHealth.index}`);
+          // Don't log which API key is being used for security
           const result = await operation(url, keyHealth.key);
           results.set(url, result);
           markApiKeySuccess(keyHealth.key);
@@ -202,7 +202,7 @@ async function executeInParallel<T>(
             onProgress(completedCount, totalCount);
           }
         } catch (error: any) {
-          console.error(`Failed to process ${url} with API key index ${keyHealth.index}:`, error.message);
+          console.error(`Failed to process ${url}:`, error.message);
           markApiKeyFailed(keyHealth.key);
           
           // Put the URL back in the queue if API key failed
@@ -612,7 +612,7 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
     console.log('Creating Individual Reveal with payload:', JSON.stringify(payload, null, 2));
 
     console.log('Making API request to:', `${baseUrl}/api/individual_reveals`);
-    console.log('Using API key (first 10 chars):', apiKey.substring(0, 10) + '...');
+    // Don't log API key for security
     
     const response = await fetch(`${baseUrl}/api/individual_reveals`, {
       method: 'POST',
@@ -729,7 +729,7 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
           const contact = statusData.data;
           
           // Debug the entire contact object to see all fields
-          console.log('🔍 Full contact data from Wiza API:', JSON.stringify(contact, null, 2));
+          // Removed detailed logging for privacy
           
           // Extract contact information
           const extractedContact: Contact = {
@@ -806,34 +806,9 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
           if (extractedContact.phones && extractedContact.phones.length > 0) {
             extractedContact.phone = extractedContact.phones[0];
           }
-
-          console.log('📞 Phone extraction:', {
-            found_phones: extractedContact.phones,
-            raw_phone_fields: {
-              phone_number: contact.phone_number,
-              phone: contact.phone,
-              mobile_phone: contact.mobile_phone,
-              work_phone: contact.work_phone
-            }
-          });
-
-          console.log('✅ Successfully extracted contact:', {
-            name: extractedContact.name,
-            emails: extractedContact.emails,
-            emailCount: extractedContact.emails?.length || 0,
-            phones: extractedContact.phones,
-            phoneCount: extractedContact.phones?.length || 0,
-            location: extractedContact.location
-          });
-
-          // Debug: Log raw email data from API
-          console.log('📧 Raw email data from API:', {
-            email: contact.email,
-            work_email: contact.work_email,
-            personal_email: contact.personal_email,
-            likely_email: contact.likely_email,
-            emails_array: contact.emails
-          });
+          
+          // Log extraction summary without revealing personal data
+          console.log('✅ Successfully extracted contact');
 
           return {
             success: true,
@@ -952,10 +927,8 @@ export const extractContactWithWizaIndividual = async (linkedinUrl: string): Pro
         });
 
         if (status.data.is_complete) {
-          console.log('=== INDIVIDUAL REVEAL COMPLETE OBJECT ===');
-          console.log(JSON.stringify(status.data, null, 2));
-          console.log('=== END INDIVIDUAL REVEAL OBJECT ===');
-
+          // Removed detailed logging for privacy
+          
           // Extract ALL emails
           const allEmails: string[] = [];
           
@@ -972,8 +945,6 @@ export const extractContactWithWizaIndividual = async (linkedinUrl: string): Pro
               }
             });
           }
-          
-          console.log('All emails found:', allEmails);
           
           // Extract ALL phone numbers
           const allPhones: string[] = [];
@@ -996,21 +967,8 @@ export const extractContactWithWizaIndividual = async (linkedinUrl: string): Pro
             });
           }
           
-          console.log('All phones found:', allPhones);
-          
-          // Debug: Log all phone-related fields
-          console.log('Phone field debugging:', {
-            mobile_phone: status.data.mobile_phone,
-            phone_number: status.data.phone_number,
-            phones: status.data.phones,
-            phone_status: status.data.phone_status,
-            hasPhones: !!status.data.phones,
-            phonesLength: status.data.phones?.length || 0,
-            enrichmentLevel: status.data.enrichment_level
-          });
-
           // Debug: Log all available fields
-          console.log('🔍 Full individual reveal data:', JSON.stringify(status.data, null, 2));
+          // Removed detailed logging for privacy
 
           // Extract contact information directly from reveal data
           const contact: Contact = {
@@ -1027,14 +985,7 @@ export const extractContactWithWizaIndividual = async (linkedinUrl: string): Pro
             location: status.data.location
           };
 
-          console.log('Individual Reveal Contact created:', {
-            id: contact.id,
-            name: contact.name,
-            hasEmail: !!contact.email,
-            hasPhone: !!contact.phone,
-            email: contact.email,
-            phone: contact.phone
-          });
+          console.log('Individual Reveal Contact created successfully');
 
           if (!contact.email && !contact.phone) {
             return {
@@ -1288,7 +1239,7 @@ export const extractContactsInParallel = async (
   onProgress?: (current: number, total: number) => void
 ): Promise<Map<string, ExtractionResult>> => {
   console.log(`Starting parallel extraction for ${linkedinUrls.length} LinkedIn URLs`);
-  console.log(`Available healthy API keys: ${getHealthyApiKeys().length}`);
+  // Don't log API key details for security
   
   if (linkedinUrls.length === 0) {
     return new Map();
@@ -1366,12 +1317,7 @@ export const extractContactsInParallel = async (
             const contact = statusData.data;
             
             // Log the response for debugging
-            console.log(`Parallel extraction - Individual Reveal data for ${linkedinUrl}:`, {
-              hasData: !!contact,
-              status: contact?.status,
-              name: contact?.name,
-              email: contact?.email
-            });
+            // Removed detailed logging for privacy
             
             if (!contact || !contact.name) {
               return {

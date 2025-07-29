@@ -215,10 +215,10 @@ const ContactExtractor: React.FC = () => {
             extractedContacts.push(result.contact);
             saveContact(result.contact);
             successCount++;
-            console.log(`✅ Successfully extracted: ${result.contact.name} from ${url}`);
+            // Don't log personal data for privacy
           } else {
             failedCount++;
-            console.error(`❌ Failed to extract ${url}:`, result.error || 'Unknown error');
+            console.error(`❌ Failed to extract contact`);
           }
         });
 
