@@ -200,13 +200,18 @@ const ContactExtractor: React.FC = () => {
         showFeedback('info', `🚀 Processing ${validUrls.length} URLs in parallel for faster extraction...`);
         
         const results = await extractContactsInParallel(validUrls);
+        console.log(`Parallel extraction completed. Results size: ${results.size}`);
+        
         const extractedContacts: Contact[] = [];
         let successCount = 0;
         let failedCount = 0;
+        let currentProgress = 0;
 
+        // Iterate through the results Map properly
         results.forEach((result, url) => {
+          currentProgress++;
           setBulkProgress({ 
-            current: Math.min(results.size, validUrls.length), 
+            current: currentProgress, 
             total: validUrls.length 
           });
           
@@ -214,11 +219,14 @@ const ContactExtractor: React.FC = () => {
             extractedContacts.push(result.contact);
             saveContact(result.contact);
             successCount++;
+            console.log(`✅ Successfully extracted: ${result.contact.name} from ${url}`);
           } else {
             failedCount++;
-            console.error(`Failed to extract ${url}:`, result.error);
+            console.error(`❌ Failed to extract ${url}:`, result.error || 'Unknown error');
           }
         });
+
+        console.log(`Bulk extraction summary: ${successCount} successful, ${failedCount} failed`);
 
         // Update the contacts state with all new contacts
         setContacts(prevContacts => {
@@ -238,6 +246,12 @@ const ContactExtractor: React.FC = () => {
 
       } catch (error) {
         console.error('Bulk extraction error:', error);
+        console.error('Error details:', {
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+          validUrls: validUrls.length,
+          type: typeof error
+        });
         showFeedback('error', `Bulk extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       } finally {
         setIsExtracting(false);

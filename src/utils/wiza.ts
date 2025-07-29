@@ -1346,8 +1346,18 @@ export const extractContactsInParallel = async (linkedinUrls: string[]): Promise
           const statusData = await statusResponse.json();
           
           if (statusData.data?.status === 'finished') {
-            const contact = statusData.data?.contact;
-            if (!contact) {
+            // The contact data is directly in statusData.data, not statusData.data.contact
+            const contact = statusData.data;
+            
+            // Log the response for debugging
+            console.log(`Parallel extraction - Individual Reveal data for ${linkedinUrl}:`, {
+              hasData: !!contact,
+              status: contact?.status,
+              name: contact?.name,
+              email: contact?.email
+            });
+            
+            if (!contact || !contact.name) {
               return {
                 success: false,
                 error: 'No contact data in response'
@@ -1369,24 +1379,60 @@ export const extractContactsInParallel = async (linkedinUrls: string[]): Promise
               extractedAt: new Date().toISOString()
             };
 
-            // Extract emails
-            const emailFields = [contact.email, contact.work_email, contact.personal_email];
+            // Extract emails - handle both individual fields and arrays
+            const emailFields = [
+              contact.email,
+              contact.work_email,
+              contact.personal_email,
+              contact.likely_email
+            ];
+            
+            // Add individual email fields first
             for (const email of emailFields) {
-              if (email && extractedContact.emails && !extractedContact.emails.includes(email)) {
+              if (email && typeof email === 'string' && extractedContact.emails && !extractedContact.emails.includes(email)) {
                 extractedContact.emails.push(email);
               }
             }
+            
+            // Also handle emails array if it exists
+            if (contact.emails && Array.isArray(contact.emails)) {
+              for (const emailItem of contact.emails) {
+                const emailValue = typeof emailItem === 'string' ? emailItem : emailItem?.email;
+                if (emailValue && !extractedContact.emails?.includes(emailValue)) {
+                  extractedContact.emails?.push(emailValue);
+                }
+              }
+            }
+            
             if (extractedContact.emails && extractedContact.emails.length > 0) {
               extractedContact.email = extractedContact.emails[0];
             }
 
-            // Extract phones
-            const phoneFields = [contact.phone_number, contact.phone, contact.mobile_phone];
+            // Extract phones - handle both individual fields and arrays
+            const phoneFields = [
+              contact.phone_number,
+              contact.phone,
+              contact.mobile_phone,
+              contact.work_phone
+            ];
+            
+            // Add individual phone fields first
             for (const phone of phoneFields) {
-              if (phone && extractedContact.phones && !extractedContact.phones.includes(phone)) {
+              if (phone && typeof phone === 'string' && extractedContact.phones && !extractedContact.phones.includes(phone)) {
                 extractedContact.phones.push(phone);
               }
             }
+            
+            // Also handle phones array if it exists
+            if (contact.phones && Array.isArray(contact.phones)) {
+              for (const phoneItem of contact.phones) {
+                const phoneValue = typeof phoneItem === 'string' ? phoneItem : phoneItem?.number;
+                if (phoneValue && !extractedContact.phones?.includes(phoneValue)) {
+                  extractedContact.phones?.push(phoneValue);
+                }
+              }
+            }
+            
             if (extractedContact.phones && extractedContact.phones.length > 0) {
               extractedContact.phone = extractedContact.phones[0];
             }

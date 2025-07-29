@@ -1,0 +1,3220 @@
+---
+openapi: 3.0.1
+info:
+  title: Wiza API Documentation
+  version: v1
+components:
+  securitySchemes:
+    bearer_auth:
+      type: http
+      scheme: bearer
+      description: Enter your bearer token (your API key) in the **Authorization**
+        header in the format `Bearer {token}`
+  schemas:
+    ContactDetailsInput:
+      type: object
+      required:
+      - full_name
+      - company
+      properties:
+        full_name:
+          type: string
+          description: Full name of the contact. e.g. "Stephen Hakami".
+          example: Stephen Hakami
+        company:
+          type: string
+          description: Name of the company. e.g. "Wiza".
+          example: Wiza
+        domain:
+          type: string
+          description: Domain of the company. e.g. "wiza.co". This is optional.
+          example: wiza.co
+        profile_url:
+          type: string
+          description: URL of the Linkedin profile. e.g. "https://www.linkedin.com/in/stephen-hakami-5babb21b0/".
+          example: https://www.linkedin.com/in/stephen-hakami-5babb21b0/
+        email:
+          type: string
+          description: Email address of the contact.
+          example: stephen@wiza.co
+    LinkedinProfileInput:
+      type: object
+      required:
+      - profile_url
+      properties:
+        profile_url:
+          type: string
+          description: URL of the Linkedin profile. e.g. "https://www.linkedin.com/in/stephen-hakami-5babb21b0/".
+          example: https://www.linkedin.com/in/stephen-hakami-5babb21b0/
+    EmailInput:
+      type: object
+      required:
+      - email
+      properties:
+        email:
+          type: string
+          description: Email address of the contact.
+          example: stephen@wiza.co
+    Location:
+      type: object
+      properties:
+        v:
+          type: string
+          description: name of the location
+          example: Toronto, Ontario, Canada
+        b:
+          type: string
+          description: type of location
+          enum:
+          - city
+          - state
+          - country
+        s:
+          type: string
+          description: whether to include or exclude the location
+          enum:
+          - i
+          - e
+    ProspectSearchResponse:
+      type: object
+      properties:
+        status:
+          type: object
+          properties:
+            code:
+              type: integer
+              example: 200
+            message:
+              type: string
+              example: ''
+        data:
+          type: object
+          properties:
+            total:
+              type: integer
+              example: 15
+            profiles:
+              type: array
+              items:
+                type: object
+                properties:
+                  full_name:
+                    type: string
+                    example: Stephen Hakami
+                  linkedin_url:
+                    type: string
+                    example: linkedin.com/in/stephen-hakami-5babb21b0
+                  industry:
+                    type: string
+                    example: Computer Software
+                  job_title:
+                    type: string
+                    example: Founder, Chief Executive Officer
+                  job_title_role:
+                    type:
+                    - string
+                    - 'null'
+                    example: 
+                  job_title_sub_role:
+                    type:
+                    - string
+                    - 'null'
+                    example: 
+                  job_company_name:
+                    type: string
+                    example: Wiza
+                  job_company_website:
+                    type: string
+                    example: wiza.co
+                  location_name:
+                    type: string
+                    example: Toronto, Ontario, Canada
+    ListNotFoundResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 404
+        message:
+          type: string
+          example: List not found
+    ListResponse:
+      type: object
+      properties:
+        status:
+          type: object
+          properties:
+            code:
+              type: integer
+              example: 200
+            message:
+              type: string
+              example: "\U0001F9D9 Wiza is working on it!"
+        type:
+          type: string
+          enum:
+          - list
+          example: list
+        data:
+          type: object
+          properties:
+            id:
+              type: integer
+              example: 15
+            name:
+              type: string
+              example: VP of Sales in San Francisco
+            status:
+              type: string
+              example: queued
+            stats:
+              type: object
+              properties:
+                people:
+                  type: integer
+                  example: 2
+                credits:
+                  type: object
+                  properties:
+                    email_credits:
+                      type: integer
+                      nullable: true
+                      example: 1
+                    phone_credits:
+                      type: integer
+                      nullable: true
+                      example: 1
+                    export_credits:
+                      type: integer
+                      nullable: true
+                      example: 1
+                    api_credits:
+                      type: object
+                      nullable: true
+                      properties:
+                        email_credits:
+                          type: integer
+                          example: 2
+                        phone_credits:
+                          type: integer
+                          example: 5
+                        scrape_credits:
+                          type: integer
+                          example: 1
+                        total:
+                          type: integer
+                          example: 8
+            finished_at:
+              type: string
+              format: date-time
+              nullable: true
+            created_at:
+              type: string
+              format: date-time
+            enrichment_level:
+              type: string
+              example: partial
+            email_options:
+              type: object
+              properties:
+                accept_work:
+                  type: boolean
+                  example: true
+                accept_personal:
+                  type: boolean
+                  example: true
+                accept_generic:
+                  type: boolean
+                  example: true
+            report_type:
+              type: string
+              example: people
+    StartIndividualRevealResponse:
+      type: object
+      properties:
+        status:
+          type: object
+          properties:
+            code:
+              type: integer
+              example: 200
+            message:
+              type: string
+              example: "\U0001F9D9 Wiza is working on it!"
+        type:
+          type: string
+          enum:
+          - individual_reveal
+          example: individual_reveal
+        data:
+          type: object
+          properties:
+            id:
+              type: integer
+              example: 32
+            status:
+              type: string
+              example: queued
+            is_complete:
+              type: boolean
+              example: false
+    IndividualRevealResponse:
+      type: object
+      properties:
+        status:
+          type: object
+          properties:
+            code:
+              type: integer
+              example: 200
+            message:
+              type: string
+              example: "\U0001F9D9 Wiza is working on it!"
+        type:
+          type: string
+          enum:
+          - individual_reveal
+          example: individual_reveal
+        data:
+          type: object
+          properties:
+            id:
+              type: integer
+              example: 32
+            status:
+              type: string
+              example: queued
+            is_complete:
+              type: boolean
+              example: false
+            name:
+              type: string
+              example: Stephen Hakami
+            company:
+              type: string
+              example: Wiza
+            enrichment_level:
+              type: string
+              example: partial
+            linkedin_profile_url:
+              type: string
+              example: https://www.linkedin.com/in/stephen-hakami-5babb21b0/
+            title:
+              type: string
+              example: Founder, Chief Executive Officer
+            location:
+              type: string
+              example: Toronto, Ontario, Canada
+            email:
+              type:
+              - string
+              - 'null'
+              example: stephen@wiza.co
+            email_type:
+              type:
+              - string
+              - 'null'
+              example: work
+            email_status:
+              type: string
+              nullable: true
+              enum:
+              - valid
+              - risky
+              - unfound
+              - 'null'
+              example: valid
+            emails:
+              type: array
+              items:
+                type: object
+                properties:
+                  email:
+                    type: string
+                    example: stephen@wiza.co
+                  email_type:
+                    type: string
+                    example: work
+                  email_status:
+                    type: string
+                    enum:
+                    - valid
+                    - risky
+                    - unfound
+                    example: valid
+            mobile_phone:
+              type:
+              - string
+              - 'null'
+              example: "+11234567890"
+            phone_number:
+              type:
+              - string
+              - 'null'
+              example: "+11234567890"
+            phone_status:
+              nullable: true
+              type:
+              - string
+              - 'null'
+              enum:
+              - found
+              - unfound
+              - 'null'
+            phones:
+              type: array
+              items:
+                type: object
+                properties:
+                  number:
+                    type: string
+                    example: "+11234567890"
+                  pretty_number:
+                    type: string
+                    example: "+1 (123) 456-7890"
+                  type:
+                    type: string
+                    example: mobile
+                    enum:
+                    - mobile
+                    - other
+            company_size:
+              type: integer
+              example: 21
+            company_type:
+              type: string
+              example: Private
+            company_domain:
+              type: string
+              example: wiza.co
+            company_locality:
+              type: string
+              example: Toronto
+            company_region:
+              type: string
+              example: Ontario
+            company_country:
+              type: string
+              example: Canada
+            company_street:
+              type: string
+              example: 1234 Street
+            company_founded:
+              type: integer
+              example: 2017
+            company_funding:
+              type: integer
+              example: 1000000
+            company_revenue:
+              type: integer
+              example: 1000000
+            company_industry:
+              type: string
+              example: Software Development
+            company_linkedin:
+              type: string
+              example: https://www.linkedin.com/company/wizainc/
+            company_location:
+              type: string
+              example: Toronto, Ontario, Canada
+            company_size_range:
+              type: string
+              example: 11-50
+            company_description:
+              type: string
+              example: Wiza is a data enrichment tool that helps you find email addresses
+                and phone numbers of your ideal customers.
+            company_postal_code:
+              type: string
+              example: M5V 2A1
+            company_subindustry:
+              type: string
+              example: Data Enrichment
+            credits:
+              type: object
+              description: Breakdown of credits used for this request.
+              nullable: true
+              properties:
+                email_credits:
+                  type: integer
+                  nullable: true
+                  example: 1
+                  description: Number of email credits used.
+                phone_credits:
+                  type: integer
+                  nullable: true
+                  example: 1
+                  description: Number of phone credits used.
+                export_credits:
+                  type: integer
+                  nullable: true
+                  example: 0
+                  description: Number of export credits used.
+                api_credits:
+                  type: object
+                  nullable: true
+                  description: Breakdown of API credits used. If the request is from
+                    the API, this will be included.
+                  properties:
+                    total:
+                      type: integer
+                      description: Total number of API credits used.
+                      example: 8
+                    email_credits:
+                      type: integer
+                      example: 2
+                      description: Number of API email credits used.
+                    phone_credits:
+                      type: integer
+                      example: 5
+                      description: Number of API phone credits used.
+                    scrape_credits:
+                      type: integer
+                      example: 1
+                      description: Number of API scrape credits used.
+    ContactsResponse:
+      type: object
+      properties:
+        status:
+          type: object
+          properties:
+            code:
+              type: integer
+              example: 200
+            message:
+              type: string
+              example: ''
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              list_name:
+                type: string
+                example: from api1
+              email_type:
+                type:
+                - string
+                - 'null'
+                example: work
+              email_status:
+                type:
+                - string
+                - 'null'
+                example: risky
+              email:
+                type:
+                - string
+                - 'null'
+                example: stephen@wiza.co
+              full_name:
+                type: string
+                nullable: true
+                example: Stephen Hakami
+              first_name:
+                type: string
+                example: Stephen
+              last_name:
+                type: string
+                example: Hakami
+              title:
+                type: string
+                example: Founder, Chief Executive Officer
+              location:
+                type: string
+                example: New York / Toronto
+              linkedin:
+                type: string
+                example: https://www.linkedin.com/in/stephen-hakami-5babb21b0/
+              domain:
+                type: string
+                example: wiza.co
+              company:
+                type: string
+                example: Wiza
+              company_domain:
+                type: string
+                example: wiza.co
+              company_industry:
+                type: string
+                nullable: true
+              company_subindustry:
+                type: string
+                nullable: true
+              company_size:
+                type: string
+                nullable: true
+              company_size_range:
+                type: string
+                nullable: true
+              company_founded:
+                type: string
+                nullable: true
+              company_revenue:
+                type: string
+                nullable: true
+              company_funding:
+                type: string
+                nullable: true
+              company_type:
+                type: string
+                nullable: true
+              company_linkedin:
+                type: string
+                example: https://www.linkedin.com/company/wizainc/
+              company_twitter:
+                type: string
+                nullable: true
+              company_facebook:
+                type: string
+                nullable: true
+              company_description:
+                type: string
+                nullable: true
+              company_last_funding_round:
+                type: string
+                nullable: true
+              company_last_funding_amount:
+                type: string
+                nullable: true
+              company_last_funding_at:
+                type: string
+                nullable: true
+              company_location:
+                type: string
+                nullable: true
+              company_street:
+                type: string
+                nullable: true
+              company_locality:
+                type: string
+                nullable: true
+              company_region:
+                type: string
+                nullable: true
+              company_country:
+                type: string
+                nullable: true
+    UnauthorizedErrorResponse:
+      type: object
+      properties:
+        status:
+          type: object
+          properties:
+            code:
+              type: integer
+              example: 401
+            message:
+              type: string
+              example: Unauthorized
+    CreditsResponse:
+      type: object
+      properties:
+        credits:
+          type: object
+          properties:
+            email_credits:
+              type:
+              - string
+              - integer
+              example: 15
+              description: Number of email credits remaining, 'unlimited' if unlimited.
+            phone_credits:
+              type:
+              - string
+              - integer
+              example: 15
+              description: Number of phone credits remaining, 'unlimited' if unlimited.
+            export_credits:
+              type: integer
+              example: 15
+              description: Number of export credits remaining.
+            api_credits:
+              type: number
+              example: 15.0
+              description: Number of API credits remaining.
+      example:
+        credits:
+          email_credits: unlimited
+          phone_credits: 100
+          export_credits: 0
+          api_credits: 100
+paths:
+  "/api/lists":
+    post:
+      summary: Create List
+      description: |
+        >
+        Create a list of people to enrich.
+
+        Once the list is completed, an update will be posted to the webhook URL as configured in your [ account settings ]( http://wiza.co/app/settings/api ). The payload will be the same as the response of this endpoint. If you wish to do added authentication, the headers in the webhook request will include `x-auth-key` which will be a SHA256 hash of your api key.
+
+        You can get the status of the list by calling the `GET /api/lists/:id` endpoint.
+        And you can get the contacts by calling the `GET /api/lists/:id/contacts` endpoint.
+
+        **Note:** Please check the status of the list as it may fail sometimes due to LinkedIn rate limiting.
+      security:
+      - bearer_auth: []
+      x-codeSamples:
+      - lang: Javascript
+        source: |
+          const apiKey = "your api key here" // update with your api_key
+
+          const myHeaders = new Headers();
+          myHeaders.append("Content-Type", "application/json");
+          myHeaders.append("Authorization", `Bearer ${apiKey}`);
+
+          const raw = JSON.stringify({
+            "list": {
+              "name": "List name",
+              "enrichment_level": "partial",
+              "email_options": {
+                "accept_work": true,
+                "accept_personal": true,
+                "accept_generic": true
+              },
+              "items": [
+                {
+                  "full_name": "Stephen Hakami",
+                  "company": "Wiza",
+                  "domain": "wiza.co"
+                }, {
+                  "profile_url": "https://www.linkedin.com/in/stephen-hakami-5babb21b0/"
+                }, {
+                  "email": "stephen@wiza.co"
+                }
+              ]
+            }
+          });
+
+          const requestOptions = {
+            method: "POST",
+            headers: myHeaders,
+            body: raw,
+            redirect: "follow"
+          };
+
+          fetch("https://wiza.co/api/lists", requestOptions)
+            .then((response) => response.text())
+            .then((result) => console.log(result))
+            .catch((error) => console.error(error));
+      - lang: Python
+        source: |
+          import http.client
+          import json
+
+          api_key = "your api key here" # update with your api_key
+
+          conn = http.client.HTTPSConnection("wiza.co")
+          payload = json.dumps({
+            "list": {
+              "name": "List name",
+              "enrichment_level": "partial",
+              "email_options": {
+                "accept_work": True,
+                "accept_personal": True,
+                "accept_generic": True
+              },
+              "items": [
+                {
+                  "full_name": "Stephen Hakami",
+                  "company": "Wiza",
+                  "domain": "wiza.co"
+                }, {
+                  "profile_url": "https://www.linkedin.com/in/stephen-hakami-5babb21b0/"
+                }, {
+                  "email": "stephen@wiza.co"
+                }
+              ]
+            }
+          })
+          authorization = ("Bearer {api_key}").format(api_key=api_key)
+          headers = {
+            'Content-Type': 'application/json',
+            'Authorization': authorization
+          }
+          conn.request("POST", "/api/lists", payload, headers)
+          res = conn.getresponse()
+          data = res.read()
+          print(data.decode("utf-8"))
+      - lang: Ruby
+        source: |
+          require "uri"
+          require "json"
+          require "net/http"
+
+          api_key = "your api key here" # update with your api_key
+
+          url = URI("https://wiza.co/api/lists")
+
+          https = Net::HTTP.new(url.host, url.port);
+          https.use_ssl = true
+          request = Net::HTTP::Post.new(url)
+          request["Content-Type"] = "application/json"
+          request["Authorization"] = "Bearer #{api_key}"
+          request.body = JSON.dump({
+            "list": {
+              "name": "List name",
+              "enrichment_level": "partial",
+              "email_options": {
+                "accept_work": true,
+                "accept_personal": true,
+                "accept_generic": true
+              },
+              "items": [
+                {
+                  "full_name": "Stephen Hakami",
+                  "company": "Wiza",
+                  "domain": "wiza.co"
+                }, {
+                  "profile_url": "https://www.linkedin.com/in/stephen-hakami-5babb21b0/"
+                }, {
+                  "email": "stephen@wiza.co"
+                }
+              ]
+            }
+          })
+
+          response = https.request(request)
+          puts response.read_body
+      - lang: Curl
+        source: |
+          api_key="your api key here" # update with your api_key
+
+          curl --location 'https://wiza.co/api/lists' --header 'Content-Type: application/json' --header "Authorization: Bearer ${api_key}" --data '{
+            "list": {
+              "name": "List name",
+              "enrichment_level": "partial",
+              "email_options": {
+                "accept_work": true,
+                "accept_personal": true,
+                "accept_generic": true
+              },
+              "items": [
+                {
+                  "full_name": "Stephen Hakami",
+                  "company": "Wiza",
+                  "domain": "wiza.co"
+                }, {
+                  "profile_url": "https://www.linkedin.com/in/stephen-hakami-5babb21b0/"
+                }, {
+                  "email": "stephen@wiza.co"
+                }
+              ]
+            }
+          }'
+      parameters: []
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ListResponse"
+        '401':
+          description: Unauthorized
+        '400':
+          description: Error creating list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: object
+                    properties:
+                      code:
+                        type: integer
+                        example: 400
+                      message:
+                        type: string
+                        example: Please add a valid payment method to start this scan.
+                        description: |
+                          >
+                          Potential error messages:
+
+                          - Your seat is currently paused. Contact your account owner.
+                          - Please make sure you have an active subscription.
+                          - Please add a valid payment method to start this scan.
+                          - Please accept either personal or work email types.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                list:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      description: Name of the list. e.g. "VP of Sales in San Francisco"
+                      example: VP of Sales in San Francisco
+                    enrichment_level:
+                      type: string
+                      enum:
+                      - none
+                      - partial
+                      - full
+                      description: |-
+                        >
+                        Enrichment level of the list.
+                        | Enrichment Level   | Description                          |
+                        |--------|--------------------------------------|
+                        | none   | Will enrich with contact's data when you provide a Linkedin profile url or email. But will not find emails or phone numbers |
+                        | partial| Will find emails.                     |
+                        | full   | Will find emails and phone numbers.   |
+                    email_options:
+                      description: Types of emails to return.
+                      type: object
+                      properties:
+                        accept_work:
+                          type: boolean
+                          description: Professional email address, i.e. tim.cooke@apple.com
+                        accept_personal:
+                          type: boolean
+                          description: A personal email address, i.e. tcooke1960@gmail.com
+                        accept_generic:
+                          type: boolean
+                          description: A generic email address, i.e. hello@apple.com
+                    items:
+                      description: List of items to be enriched. Each item can be
+                        either contact details or a Linkedin profile URL of any type
+                        (Linkedin, Sales Navigator, or Recruiter). There is a limit
+                        of 2500 items per list.
+                      type: array
+                      items:
+                        anyOf:
+                        - "$ref": "#/components/schemas/ContactDetailsInput"
+                        - "$ref": "#/components/schemas/LinkedinProfileInput"
+                        - "$ref": "#/components/schemas/EmailInput"
+                    callback_url:
+                      type: string
+                      description: URL to send the list update to. If not provided,
+                        the default webhook URL configured in your account settings
+                        will be used.
+                  required:
+                  - name
+                  - enrichment_level
+                  - email_options
+                  - items
+                  example:
+                    name: VP of Sales in San Francisco
+                    enrichment_level: partial
+                    email_options:
+                      accept_work: true
+                      accept_personal: true
+                      accept_generic: true
+                    items:
+                    - full_name: Stephen Hakami
+                      company: Wiza
+                      domain: wiza.co
+                    - profile_url: https://www.linkedin.com/in/stephen-hakami-5babb21b0/
+                    - email: stephen@wiza.co
+  "/api/lists/{id}":
+    parameters:
+    - name: id
+      in: path
+      description: id
+      required: true
+      schema:
+        type: string
+    get:
+      summary: Get List
+      description: Get the list with the given id
+      security:
+      - bearer_auth: []
+      x-codeSamples:
+      - lang: Javascript
+        source: |
+          const apiKey = "your api key here" // update with your api_key
+          const listId = 0 // update with the id of the list that you would like returned
+
+          const myHeaders = new Headers();
+          myHeaders.append('Authorization', `Bearer ${apiKey}`);
+
+          const requestOptions = {
+            method: 'GET',
+            headers: myHeaders,
+            redirect: 'follow'
+          };
+
+          fetch(`https://wiza.co/api/lists/${listId}`, requestOptions)
+            .then((response) => response.text())
+            .then((result) => console.log(result))
+            .catch((error) => console.error(error));
+      - lang: Python
+        source: |
+          import http.client
+
+          api_key = "your api key here" # update with your api_key
+          list_id = 0 # update with the id of the list that you would like returned
+
+          conn = http.client.HTTPSConnection('wiza.co')
+          authorization = ("Bearer {api_key}").format(api_key=api_key)
+          payload = ''
+          headers = { 'Authorization': authorization }
+          url = ("/api/lists/{list_id}").format(list_id=list_id)
+          conn.request('GET', url, payload, headers)
+          res = conn.getresponse()
+          data = res.read()
+          print(data.decode('utf-8'))
+      - lang: Ruby
+        source: |
+          require 'uri'
+          require 'net/http'
+
+          api_key = "your api key here" # update with your api_key
+          list_id = 0 # update with the id of the list that you would like returned
+
+          url = URI("https://wiza.co/api/lists/#{list_id}")
+
+          https = Net::HTTP.new(url.host, url.port);
+          https.use_ssl = true
+          request = Net::HTTP::Get.new(url)
+          request['Authorization'] = "Bearer #{api_key}"
+
+          response = https.request(request)
+          puts response.read_body
+      - lang: Curl
+        source: |
+          api_key="your api key here" # update with your api_key
+          list_id=0 # update with the id of the list that you would like returned
+
+          curl --location "https://wiza.co/api/lists/${list_id}" --header "Authorization: Bearer ${api_key}"
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ListResponse"
+                - type: object
+                  properties:
+                    status:
+                      type: object
+                      properties:
+                        code:
+                          type: integer
+                          example: 200
+                        message:
+                          type: string
+                          example: ''
+        '401':
+          description: Unauthorized
+  "/api/lists/{id}/contacts":
+    parameters:
+    - name: id
+      in: path
+      description: id
+      required: true
+      schema:
+        type: string
+    get:
+      summary: Get List Contacts
+      description: |-
+        >
+        Get contacts for a list.
+
+        By default a json response is returned. To get a csv response, append `.csv` to the url path.
+      security:
+      - bearer_auth: []
+      x-codeSamples:
+      - lang: Javascript
+        source: |
+          const apiKey = "your api key here" // update with your api_key
+          const listId = 0 // update with the id of the list that you would like returned
+
+          const myHeaders = new Headers();
+          myHeaders.append("Authorization", `Bearer ${apiKey}`);
+
+          const requestOptions = {
+            method: "GET",
+            headers: myHeaders,
+            redirect: "follow"
+          };
+
+          fetch(`https://wiza.co/api/lists/${listId}/contacts?segment=people`, requestOptions)
+            .then((response) => response.text())
+            .then((result) => console.log(result))
+            .catch((error) => console.error(error));
+      - lang: Python
+        source: |
+          import http.client
+
+          api_key = "your api key here" # update with your api_key
+          list_id = 0 # update with the id of the list that you would like returned
+
+          conn = http.client.HTTPSConnection("wiza.co")
+          authorization = ("Bearer {api_key}").format(api_key=api_key)
+          payload = ''
+          headers = { 'Authorization': authorization}
+          url = ("/api/lists/{list_id}/contacts?segment=people").format(list_id=list_id)
+          conn.request("GET", url, payload, headers)
+          res = conn.getresponse()
+          data = res.read()
+          print(data.decode("utf-8"))
+      - lang: Ruby
+        source: |
+          require "uri"
+          require "net/http"
+
+          api_key = "your api key here" # update with your api_key
+          list_id = 0 # update with the id of the list that you would like returned
+
+          url = URI("https://wiza.co/api/lists/#{list_id}/contacts?segment=people")
+
+          https = Net::HTTP.new(url.host, url.port);
+          https.use_ssl = true
+
+          request = Net::HTTP::Get.new(url)
+          request["Authorization"] = "Bearer #{api_key}"
+
+          response = https.request(request)
+          puts response.read_body
+      - lang: Curl
+        source: |
+          api_key="your api key here" # update with your api_key
+          list_id=0 # update with the id of the list that you would like returned
+
+          curl --location "https://wiza.co/api/lists/${list_id}/contacts?segment=people" --header "Authorization: Bearer ${api_key}"
+      parameters:
+      - name: segment
+        in: query
+        required: true
+        example: people
+        enum:
+        - people
+        - valid
+        - risky
+        description: |-
+          >
+          Specify the segment of contacts to return.
+          | Segment | Description           |
+          |----------|-----------------------|
+          | people   | All contacts          |
+          | valid    | Only valid contacts   |
+          | risky    | Only risky contacts   |
+        schema:
+          type: string
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ContactsResponse"
+        '401':
+          description: Unauthorized
+        '400':
+          description: Error getting list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: object
+                    properties:
+                      code:
+                        type: integer
+                        example: 400
+                      message:
+                        type: string
+                        example: Segment is not valid
+                        description: |
+                          >
+                          Potential error messages:
+
+                          - Segment is not valid
+                          - No contacts to export
+  "/api/individual_reveals":
+    post:
+      summary: Start Individual Reveal
+      description: |
+        >
+        Start an individual reveal. An individual reveal is a single contact enrichment. You can provide a name, company, and domain, or an email, or a LinkedIn profile URL.
+
+        Once the reveal is completed, an update will be posted to the webhook URL as configured in your [ account settings ]( http://wiza.co/app/settings/api ). The payload will be the same as the response of the Get Individual Reveal endpoint. If you wish to do added authentication, the headers in the webhook request will include `x-auth-key` which will be a SHA256 hash of your api key.
+
+        You can get the status of the individual reveal by calling the `GET /api/individual_reveals/:id` endpoint.
+      security:
+      - bearer_auth: []
+      parameters: []
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/StartIndividualRevealResponse"
+        '401':
+          description: Unauthorized
+        '400':
+          description: Error starting individual reveal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: object
+                    properties:
+                      code:
+                        type: integer
+                        example: 400
+                      message:
+                        type: string
+                        example: Please add a valid payment method to start this scan.
+                        description: ">\n      Potential error messages:\n\n      -
+                          Your seat is currently paused. Contact your account owner.\n
+                          \     - Please make sure you have an active subscription.\n
+                          \     - Please add a valid payment method to start this
+                          scan.\n      "
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                individual_reveal:
+                  oneOf:
+                  - "$ref": "#/components/schemas/ContactDetailsInput"
+                  - "$ref": "#/components/schemas/LinkedinProfileInput"
+                  - "$ref": "#/components/schemas/EmailInput"
+                enrichment_level:
+                  type: string
+                  enum:
+                  - none
+                  - partial
+                  - phone
+                  - full
+                  description: |-
+                    >
+                    Enrichment level of the list.
+                    | Enrichment Level   | Description              |
+                    |--------|--------------------------------------|
+                    | none   | Will enrich with contact's data when you provide a Linkedin profile url or email. But will not find emails or phone numbers |
+                    | partial| Will find email.                     |
+                    | phone  | Will find phone numbers.             |
+                    | full   | Will find email and phone numbers.   |
+                email_options:
+                  description: Types of emails to return. If not provided, all emails
+                    will be returned.
+                  type: object
+                  properties:
+                    accept_work:
+                      type: boolean
+                      description: Professional email address, i.e. tim.cooke@apple.com
+                    accept_personal:
+                      type: boolean
+                      description: A personal email address, i.e. tcooke1960@gmail.com
+                callback_url:
+                  type: string
+                  description: URL to send the individual reveal update to. If not
+                    provided, the default webhook URL configured in your account settings
+                    will be used.
+              required:
+              - individual_reveal
+              - enrichment_level
+            examples:
+              With Contact Details:
+                summary: Contact Details
+                value:
+                  individual_reveal:
+                    full_name: Stephen Hakami
+                    company: Wiza
+                    domain: wiza.co
+                  enrichment_level: partial
+                  email_options:
+                    accept_work: true
+                    accept_personal: false
+              With Linkedin URL:
+                summary: Linkedin Profile
+                value:
+                  individual_reveal:
+                    profile_url: https://www.linkedin.com/in/stephen-hakami-5babb21b0/
+                  enrichment_level: partial
+              With Email:
+                summary: Email
+                value:
+                  individual_reveal:
+                    email: stephen@wiza.co
+                  enrichment_level: phone
+  "/api/individual_reveals/{id}":
+    parameters:
+    - name: id
+      in: path
+      description: id
+      required: true
+      schema:
+        type: string
+    get:
+      summary: Get Individual Reveal
+      description: Get the individual reveal by id.
+      security:
+      - bearer_auth: []
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/IndividualRevealResponse"
+                - type: object
+                  properties:
+                    status:
+                      type: object
+                      properties:
+                        code:
+                          type: integer
+                          example: 200
+                        message:
+                          type: string
+                          example: ''
+        '401':
+          description: Unauthorized
+  "/api/prospects/search":
+    post:
+      summary: Prospect search
+      description: Find the number of prospects that match your search filters
+      security:
+      - bearer_auth: []
+      parameters: []
+      x-codeSamples:
+      - lang: Javascript
+        source: |
+          const apiKey = "your api key here" // update with your api_key
+
+          const myHeaders = new Headers();
+          myHeaders.append("Content-Type", "application/json");
+          myHeaders.append("Authorization", `Bearer ${apiKey}`);
+
+          const raw = JSON.stringify({
+            "filters": {
+              "job_title": [
+                {
+                  "v": "CEO",
+                  "s": "i"
+                }
+              ],
+              "job_title_level": [
+                "CXO"
+              ],
+              "job_role": [
+                "finance"
+              ],
+              "location": [
+                {
+                  "v": "Toronto, Ontario, Canada",
+                  "b": "city",
+                  "s": "i"
+                }
+              ],
+              "company_location": [
+                {
+                  "v": "Ontario, Canada",
+                  "b": "state",
+                  "s": "i"
+                }
+              ],
+              "company_size": [
+                "1-10",
+                "11-50"
+              ],
+              "company_industry": [
+                "financial services"
+              ],
+              "year_founded_start": "2010",
+              "year_founded_end": "2024"
+            }
+          });
+
+          const requestOptions = {
+            method: "POST",
+            headers: myHeaders,
+            body: raw,
+            redirect: "follow"
+          };
+
+          fetch("https://wiza.co/api/prospects/search", requestOptions)
+            .then((response) => response.text())
+            .then((result) => console.log(result))
+            .catch((error) => console.error(error));
+      - lang: Python
+        source: |
+          import http.client
+          import json
+
+          api_key = "your api key here" # update with your api_key
+
+          conn = http.client.HTTPSConnection("wiza.co")
+          payload = json.dumps({
+            "filters": {
+              "job_title": [
+                {
+                  "v": "CEO",
+                  "s": "i"
+                }
+              ],
+              "job_title_level": [
+                "CXO"
+              ],
+              "job_role": [
+                "finance"
+              ],
+              "location": [
+                {
+                  "v": "Toronto, Ontario, Canada",
+                  "b": "city",
+                  "s": "i"
+                }
+              ],
+              "company_location": [
+                {
+                  "v": "Ontario, Canada",
+                  "b": "state",
+                  "s": "i"
+                }
+              ],
+              "company_size": [
+                "1-10",
+                "11-50"
+              ],
+              "company_industry": [
+                "financial services"
+              ],
+              "year_founded_start": "2010",
+              "year_founded_end": "2024"
+            }
+          })
+          authorization = ("Bearer {api_key}").format(api_key=api_key)
+          headers = {
+            'Content-Type': 'application/json',
+            'Authorization': authorization
+          }
+          conn.request("POST", "/api/prospects/search", payload, headers)
+          res = conn.getresponse()
+          data = res.read()
+          print(data.decode("utf-8"))
+      - lang: Ruby
+        source: |+
+          require "uri"
+          require "json"
+          require "net/http"
+
+          api_key = "your api key here" # update with your api_key
+
+          url = URI("https://wiza.co/api/prospects/search")
+
+          https = Net::HTTP.new(url.host, url.port);
+          https.use_ssl = true
+          request = Net::HTTP::Post.new(url)
+          request["Content-Type"] = "application/json"
+          request["Authorization"] = "Bearer #{api_key}"
+          request.body = JSON.dump({
+            "filters": {
+              "job_title": [
+                {
+                  "v": "CEO",
+                  "s": "i"
+                }
+              ],
+              "job_title_level": [
+                "CXO"
+              ],
+              "job_role": [
+                "finance"
+              ],
+              "location": [
+                {
+                  "v": "Toronto, Ontario, Canada",
+                  "b": "city",
+                  "s": "i"
+                }
+              ],
+              "company_location": [
+                {
+                  "v": "Ontario, Canada",
+                  "b": "state",
+                  "s": "i"
+                }
+              ],
+              "company_size": [
+                "1-10",
+                "11-50"
+              ],
+              "company_industry": [
+                "financial services"
+              ],
+              "year_founded_start": "2010",
+              "year_founded_end": "2024"
+            }
+          })
+
+          response = https.request(request)
+          puts response.read_body
+
+      - lang: Curl
+        source: "api_key=\"your api key here\" # update with your api_key\n\ncurl
+          --location 'https://wiza.co/api/prospects/search' --header 'Content-Type:
+          application/json' --header \"Authorization: Bearer ${api_key}\" --data '{
+          \  \n  \"filters\": {\n    \"job_title\": [\n      {\n        \"v\": \"CEO\",\n
+          \       \"s\": \"i\"\n      }\n    ],\n    \"job_title_level\": [\n      \"CXO\"\n
+          \   ],\n    \"job_role\": [\n      \"finance\"\n    ],\n    \"location\":
+          [\n      {\n        \"v\": \"Toronto, Ontario, Canada\",\n        \"b\":
+          \"city\",\n        \"s\": \"i\"\n      }\n    ],\n    \"company_location\":
+          [\n      {\n        \"v\": \"Ontario, Canada\",\n        \"b\": \"state\",\n
+          \       \"s\": \"i\"\n      }\n    ],\n    \"company_size\": [\"1-10\",\"11-50\"],\n
+          \   \"company_industry\": [\"financial services\"],\n    \"year_founded_start\":
+          \"2010\",\n    \"year_founded_end\": \"2024\"\n  }\n}'\n"
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ProspectSearchResponse"
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: object
+                    properties:
+                      code:
+                        type: integer
+                        example: 400
+                      message:
+                        type: string
+                        example: ''
+                        description: ''
+        '401':
+          description: Unauthorized
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - filters
+              properties:
+                size:
+                  type: integer
+                  description: The number of results to return. Defaults to 0. Max
+                    is 30.
+                  example: 10
+                filters:
+                  type: object
+                  properties:
+                    first_name:
+                      type: array
+                      items:
+                        type: string
+                      description: exact match of first name
+                      example:
+                      - John
+                      - Jane
+                    last_name:
+                      type: array
+                      items:
+                        type: string
+                      description: exact match of last name
+                      example:
+                      - Smith
+                    job_title:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          v:
+                            type: string
+                            description: Job title to search
+                            example: CEO
+                          s:
+                            type: string
+                            description: whether to include or exclude the job title
+                            enum:
+                            - i
+                            - e
+                      description: a list of job titles to include/exclude. If you
+                        want an exact title match, use double quotes around your search.
+                        e.g. '"account manager"'
+                    job_title_level:
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                        - CXO
+                        - Director
+                        - Entry
+                        - Manager
+                        - Owner
+                        - Partner
+                        - Senior
+                        - Training
+                        - Unpaid
+                        - VP
+                      description: ''
+                    job_role:
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                        - customer_service
+                        - design
+                        - education
+                        - engineering
+                        - finance
+                        - health
+                        - human_resources
+                        - legal
+                        - marketing
+                        - media
+                        - operations
+                        - public_relations
+                        - real_estate
+                        - sales
+                        - trades
+                      description: ''
+                    job_sub_role:
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                        - accounting
+                        - accounts
+                        - brand_marketing
+                        - broadcasting
+                        - business_development
+                        - compensation
+                        - content_marketing
+                        - customer_success
+                        - data
+                        - dental
+                        - devops
+                        - doctor
+                        - editorial
+                        - education_administration
+                        - electrical
+                        - employee_development
+                        - events
+                        - fitness
+                        - graphic_design
+                        - information_technology
+                        - instructor
+                        - investment
+                        - journalism
+                        - judicial
+                        - lawyer
+                        - logistics
+                        - marketing_communications
+                        - mechanical
+                        - media_relations
+                        - network
+                        - nursing
+                        - office_management
+                        - paralegal
+                        - pipeline
+                        - product
+                        - product_design
+                        - product_marketing
+                        - professor
+                        - project_engineering
+                        - project_management
+                        - property_management
+                        - quality_assurance
+                        - realtor
+                        - recruiting
+                        - researcher
+                        - security
+                        - software
+                        - support
+                        - systems
+                        - tax
+                        - teacher
+                        - therapy
+                        - video
+                        - web
+                        - web_design
+                        - wellness
+                        - writing
+                      description: ''
+                    location:
+                      type: array
+                      items:
+                        "$ref": "#/components/schemas/Location"
+                      example:
+                        v: Toronto, Ontario, Canada
+                        b: city
+                        s: i
+                      description: |-
+                        >
+                        | location type   | format of name input  |
+                        |-----------|-----------------------------|
+                        | city      | 'city, state, country'      |
+                        | state     | 'state, country'            |
+                        | country   | 'country'                   |
+                    skill:
+                      type: array
+                      items:
+                        type: string
+                      description: ''
+                    school:
+                      type: array
+                      items:
+                        type: string
+                      description: exact match of school name
+                    major:
+                      type: array
+                      items:
+                        type: string
+                      description: ''
+                    linkedin_slug:
+                      type: array
+                      items:
+                        type: string
+                      description: Can be in the format `https://linkedin.com/in/stephen-hakami-5babb21b0`
+                        or `stephen-hakami-5babb21b0`
+                      example:
+                      - stephen-hakami-5babb21b0
+                      - https://linkedin.com/in/stephen-hakami-5babb21b0
+                    job_company:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          v:
+                            type: string
+                            description: Company name
+                            example: Wiza
+                          s:
+                            type: string
+                            description: whether to include or exclude the company
+                              name
+                            enum:
+                            - i
+                            - e
+                      example:
+                      - v: Wiza
+                        s: i
+                      description: a list of company names to include/exclude
+                    past_company:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          v:
+                            type: string
+                            description: Company name
+                            example: Wiza
+                          s:
+                            type: string
+                            description: whether to include or exclude the company
+                              name
+                            enum:
+                            - i
+                            - e
+                      example:
+                      - v: Wiza
+                        s: i
+                      description: a list of past company names to include/exclude.
+                        Note that this will return people who used to work at the
+                        company AND people who currently work at the company. If you
+                        want to exclude people who currently work at the company,
+                        use the `job_company` filter with the exclude flag.
+                    company_location:
+                      type: array
+                      items:
+                        "$ref": "#/components/schemas/Location"
+                      example:
+                      - v: Toronto, Ontario, Canada
+                        b: city
+                        s: e
+                      description: |-
+                        >
+                        | location type   | format of name input  |
+                        |-----------|-----------------------------|
+                        | city      | 'city, state, country'      |
+                        | state     | 'state, country'            |
+                        | country   | 'country'                   |
+                    company_industry:
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                        - accounting
+                        - airlines/aviation
+                        - alternative dispute resolution
+                        - alternative medicine
+                        - animation
+                        - apparel & fashion
+                        - architecture & planning
+                        - arts and crafts
+                        - automotive
+                        - aviation & aerospace
+                        - banking
+                        - biotechnology
+                        - broadcast media
+                        - building materials
+                        - business supplies and equipment
+                        - capital markets
+                        - chemicals
+                        - civic & social organization
+                        - civil engineering
+                        - commercial real estate
+                        - computer & network security
+                        - computer games
+                        - computer hardware
+                        - computer networking
+                        - computer software
+                        - construction
+                        - consumer electronics
+                        - consumer goods
+                        - consumer services
+                        - cosmetics
+                        - dairy
+                        - defense & space
+                        - design
+                        - e-learning
+                        - education management
+                        - electrical/electronic manufacturing
+                        - entertainment
+                        - environmental services
+                        - events services
+                        - executive office
+                        - facilities services
+                        - farming
+                        - financial services
+                        - fine art
+                        - fishery
+                        - food & beverages
+                        - food production
+                        - fund-raising
+                        - furniture
+                        - gambling & casinos
+                        - government administration
+                        - government relations
+                        - graphic design
+                        - health, wellness and fitness
+                        - higher education
+                        - hospital & health care
+                        - hospitality
+                        - human resources
+                        - import and export
+                        - individual & family services
+                        - industrial automation
+                        - information services
+                        - information technology and services
+                        - insurance
+                        - international affairs
+                        - international trade and development
+                        - internet
+                        - investment banking
+                        - investment management
+                        - judiciary
+                        - law enforcement
+                        - law practice
+                        - legal services
+                        - legislative office
+                        - libraries
+                        - logistics and supply chain
+                        - luxury goods & jewelry
+                        - machinery
+                        - management consulting
+                        - maritime
+                        - market research
+                        - marketing and advertising
+                        - mechanical or industrial engineering
+                        - media production
+                        - medical devices
+                        - medical practice
+                        - mental health care
+                        - military
+                        - mining & metals
+                        - motion pictures and film
+                        - museums and institutions
+                        - music
+                        - nanotechnology
+                        - newspapers
+                        - non-profit organization management
+                        - oil & energy
+                        - online media
+                        - outsourcing/offshoring
+                        - package/freight delivery
+                        - packaging and containers
+                        - paper & forest products
+                        - performing arts
+                        - pharmaceuticals
+                        - philanthropy
+                        - photography
+                        - plastics
+                        - political organization
+                        - primary/secondary education
+                        - printing
+                        - professional training & coaching
+                        - program development
+                        - public policy
+                        - public relations and communications
+                        - public safety
+                        - publishing
+                        - railroad manufacture
+                        - ranching
+                        - real estate
+                        - recreational facilities and services
+                        - religious institutions
+                        - renewables & environment
+                        - research
+                        - restaurants
+                        - retail
+                        - security and investigations
+                        - semiconductors
+                        - shipbuilding
+                        - sporting goods
+                        - sports
+                        - staffing and recruiting
+                        - supermarkets
+                        - telecommunications
+                        - textiles
+                        - think tanks
+                        - tobacco
+                        - translation and localization
+                        - transportation/trucking/railroad
+                        - utilities
+                        - venture capital & private equity
+                        - veterinary
+                        - warehousing
+                        - wholesale
+                        - wine and spirits
+                        - wireless
+                        - writing and editing
+                      description: ''
+                    company_size:
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                        - 1-10
+                        - 11-50
+                        - 51-200
+                        - 201-500
+                        - 501-1000
+                        - 1001-5000
+                        - 5001-10000
+                        - 10001+
+                      description: Company Headcount
+                    company_annual_growth:
+                      type: string
+                      enum:
+                      - 0-5%
+                      - 5-10%
+                      - 10-20%
+                      - 20-50%
+                      - 50-100%
+                      - 100%+
+                      description: Company Headcount Annual Growth
+                    department_size:
+                      type: array
+                      items:
+                        type: string
+                      description: |-
+                        >
+                        Department Headcount, the format is `{department_name}:{min_headcount}-{max_headcount}` e.g. `sales:10-50`
+
+                        For less than or greater than, use `min_headcount-` or `-max_headcount` e.g. `sales:10-` or `sales:-50`
+
+                        Available department names:
+                        | department_name |
+                        |-----------------|
+                        | legal |
+                        | media |
+                        | sales |
+                        | design |
+                        | health |
+                        | trades |
+                        | finance |
+                        | education |
+                        | marketing |
+                        | operations |
+                        | engineering |
+                        | real_estate |
+                        | human_resources |
+                        | customer_service |
+                        | public_relations |
+                      example:
+                      - sales:10-50
+                    revenue:
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                        - "$0-$1M"
+                        - "$1M-$10M"
+                        - "$10M-$25M"
+                        - "$25M-$50M"
+                        - "$50M-$100M"
+                        - "$100M-$250M"
+                        - "$250M-$500M"
+                        - "$500M-$1B"
+                        - "$1B-$10B"
+                        - "$10B+"
+                      description: Company Revenue
+                    funding_date:
+                      type: object
+                      properties:
+                        t:
+                          type: string
+                          enum:
+                          - last
+                          - any
+                          description: Whether the funding date is the last round's
+                            funding date or any funding date
+                        v:
+                          type: string
+                          enum:
+                          - 60d
+                          - 90d
+                          - 180d
+                          - 270d
+                          - 1y
+                          description: Funding Date Range
+                      description: Company Funding Date
+                    last_funding_min:
+                      type: string
+                      enum:
+                      - "$500K"
+                      - "$1M"
+                      - "$5M"
+                      - "$10M"
+                      - "$25M"
+                      - "$50M"
+                      - "$100M"
+                      - "$250M"
+                      - "$500M"
+                      - "$1B"
+                      description: Company Last Funding Amount Min
+                    last_funding_max:
+                      type: string
+                      enum:
+                      - "$500K"
+                      - "$1M"
+                      - "$5M"
+                      - "$10M"
+                      - "$25M"
+                      - "$50M"
+                      - "$100M"
+                      - "$250M"
+                      - "$500M"
+                      - "$1B"
+                      description: Company Last Funding Amount Max
+                    funding_min:
+                      type: string
+                      enum:
+                      - "$500K"
+                      - "$1M"
+                      - "$5M"
+                      - "$10M"
+                      - "$25M"
+                      - "$50M"
+                      - "$100M"
+                      - "$250M"
+                      - "$500M"
+                      - "$1B"
+                      description: Company Total Funding Amount Min
+                    funding_max:
+                      type: string
+                      enum:
+                      - "$500K"
+                      - "$1M"
+                      - "$5M"
+                      - "$10M"
+                      - "$25M"
+                      - "$50M"
+                      - "$100M"
+                      - "$250M"
+                      - "$500M"
+                      - "$1B"
+                      description: Company Total Funding Amount Max
+                    funding_stage:
+                      type: object
+                      properties:
+                        t:
+                          type: string
+                          enum:
+                          - last
+                          - any
+                          description: Whether the funding stage is the last round's
+                            funding stage or any funding stage
+                        v:
+                          type: array
+                          items:
+                            type: string
+                            enum:
+                            - pre_seed
+                            - seed
+                            - series_a
+                            - series_b
+                            - series_c
+                            - series_d
+                            - series_e-j
+                            - other
+                          description: Funding Stage
+                      description: Company Funding Stage
+                    funding_type:
+                      type: object
+                      properties:
+                        t:
+                          type: string
+                          enum:
+                          - last
+                          - any
+                          description: Whether the funding type is the last round's
+                            funding type or any funding type
+                        v:
+                          type: array
+                          items:
+                            type: string
+                            enum:
+                            - angel
+                            - venture
+                            - grant
+                            - debt_financing
+                            - private_equity
+                            - crowdfunding
+                            - other
+                          description: Funding Type
+                      description: Company Funding Type
+                    company_type:
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                        - private
+                        - public
+                        - educational
+                        - government
+                        - nonprofit
+                        - public_subsidiary
+                      description: Company Type
+                    company_summary:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          v:
+                            type: string
+                            description: Words to search in the company summary
+                            example: cutting-edge
+                          s:
+                            type: string
+                            description: whether to include or exclude the words
+                            enum:
+                            - i
+                            - e
+                      description: a list of words to include/exclude in the company
+                        summary
+                    year_founded_start:
+                      type: string
+                      example: '2020'
+                      description: Company Year Founded Start
+                    year_founded_end:
+                      type: string
+                      example: '2024'
+                      description: Company Year Founded End
+  "/api/prospects/create_prospect_list":
+    post:
+      summary: Create prospect list
+      description: Create a list of prospects that match your filters
+      security:
+      - bearer_auth: []
+      parameters: []
+      x-codeSamples:
+      - lang: Javascript
+        source: |
+          const apiKey = "your api key here" // update with your api_key
+
+          const myHeaders = new Headers();
+          myHeaders.append("Content-Type", "application/json");
+          myHeaders.append("Authorization", `Bearer ${apiKey}`);
+
+          const raw = JSON.stringify({
+            "filters": {
+              "job_title": [
+                {
+                  "v": "CEO",
+                  "s": "i"
+                }
+              ],
+              "job_title_level": [
+                "CXO"
+              ],
+              "job_role": [
+                "finance"
+              ],
+              "location": [
+                {
+                  "v": "Toronto, Ontario, Canada",
+                  "b": "city",
+                  "s": "i"
+                }
+              ],
+              "company_location": [
+                {
+                  "v": "Ontario, Canada",
+                  "b": "state",
+                  "s": "i"
+                }
+              ],
+              "company_size": [
+                "1-10",
+                "11-50"
+              ],
+              "company_industry": [
+                "financial services"
+              ],
+              "year_founded_start": "2010",
+              "year_founded_end": "2024"
+            },
+            "list": {
+              "name": "Test List",
+              "max_profiles": 10
+            }
+          });
+
+          const requestOptions = {
+            method: "POST",
+            headers: myHeaders,
+            body: raw,
+            redirect: "follow"
+          };
+
+          fetch("https://wiza.co/api/prospects/create_prospect_list", requestOptions)
+            .then((response) => response.text())
+            .then((result) => console.log(result))
+            .catch((error) => console.error(error));
+      - lang: Python
+        source: |
+          import http.client
+          import json
+
+          api_key = "your api key here" # update with your api_key
+
+          conn = http.client.HTTPSConnection("wiza.co")
+          payload = json.dumps({
+            "filters": {
+              "job_title": [
+                {
+                  "v": "CEO",
+                  "s": "i"
+                }
+              ],
+              "job_title_level": [
+                "CXO"
+              ],
+              "job_role": [
+                "finance"
+              ],
+              "location": [
+                {
+                  "v": "Toronto, Ontario, Canada",
+                  "b": "city",
+                  "s": "i"
+                }
+              ],
+              "company_location": [
+                {
+                  "v": "Ontario, Canada",
+                  "b": "state",
+                  "s": "i"
+                }
+              ],
+              "company_size": [
+                "1-10",
+                "11-50"
+              ],
+              "company_industry": [
+                "financial services"
+              ],
+              "year_founded_start": "2010",
+              "year_founded_end": "2024"
+            },
+            "list": {
+              "name": "Test List",
+              "max_profiles": 10
+            }
+          })
+          authorization = ("Bearer {api_key}").format(api_key=api_key)
+          headers = {
+            'Content-Type': 'application/json',
+            'Authorization': authorization
+          }
+          conn.request("POST", "/api/prospects/create_prospect_list", payload, headers)
+          res = conn.getresponse()
+          data = res.read()
+          print(data.decode("utf-8"))
+      - lang: Ruby
+        source: |
+          require "uri"
+          require "json"
+          require "net/http"
+
+          api_key = "your api key here" # update with your api_key
+
+          url = URI("https://wiza.co/api/prospects/create_prospect_list")
+
+          https = Net::HTTP.new(url.host, url.port);
+          https.use_ssl = true
+          request = Net::HTTP::Post.new(url)
+          request["Content-Type"] = "application/json"
+          request["Authorization"] = "Bearer #{api_key}"
+          request.body = JSON.dump({
+            "filters": {
+              "job_title": [
+                {
+                  "v": "CEO",
+                  "s": "i"
+                }
+              ],
+              "job_title_level": [
+                "CXO"
+              ],
+              "job_role": [
+                "finance"
+              ],
+              "location": [
+                {
+                  "v": "Toronto, Ontario, Canada",
+                  "b": "city",
+                  "s": "i"
+                }
+              ],
+              "company_location": [
+                {
+                  "v": "Ontario, Canada",
+                  "b": "state",
+                  "s": "i"
+                }
+              ],
+              "company_size": [
+                "1-10",
+                "11-50"
+              ],
+              "company_industry": [
+                "financial services"
+              ],
+              "year_founded_start": "2010",
+              "year_founded_end": "2024"
+            },
+            "list": {
+              "name": "Test List",
+              "max_profiles": 10
+            }
+          })
+
+          response = https.request(request)
+          puts response.read_body
+      - lang: Curl
+        source: |
+          api_key="your api key here" # update with your api_key
+
+          curl --location 'https://wiza.co/api/prospects/create_prospect_list' --header 'Content-Type: application/json' --header "Authorization: Bearer ${api_key}" --data '{
+              "filters": {
+                "job_title": [
+                  {
+                    "v": "CEO",
+                    "s": "i"
+                  }
+                ],
+                "job_title_level": [
+                  "CXO"
+                ],
+                "job_role": [
+                  "finance"
+                ],
+                "location": [
+                  {
+                    "v": "Toronto, Ontario, Canada",
+                    "b": "city",
+                    "s": "i"
+                  }
+                ],
+                "company_location": [
+                  {
+                    "v": "Ontario, Canada",
+                    "b": "state",
+                    "s": "i"
+                  }
+                ],
+                "company_size": ["1-10","11-50"],
+                "company_industry": ["financial services"],
+                "year_founded_start": "2010",
+                "year_founded_end": "2024"
+              },
+              "list": {
+                  "name": "Test List",
+                  "max_profiles": 10
+              }
+          }'
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ListResponse"
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: object
+                    properties:
+                      code:
+                        type: integer
+                        example: 400
+                      message:
+                        type: string
+                        example: ''
+                        description: ''
+        '401':
+          description: Unauthorized
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - list
+              - filters
+              properties:
+                list:
+                  type: object
+                  required:
+                  - name
+                  - max_profiles
+                  properties:
+                    name:
+                      type: string
+                      description: Name of the list. e.g. "VP of Sales in San Francisco"
+                      example: VP of Sales in San Francisco
+                    max_profiles:
+                      type: integer
+                      description: The number of results to return
+                      example: 10
+                    enrichment_level:
+                      type: string
+                      enum:
+                      - none
+                      - partial
+                      - full
+                      description: |-
+                        >
+                        Enrichment level of the list. The default is partial.
+                        | Enrichment Level   | Description                          |
+                        |--------|--------------------------------------|
+                        | none   | Will enrich with contact data when you provide a Linkedin profile url or email. But will not find emails or phone numbers |
+                        | partial| Will find emails.                     |
+                        | full   | Will find emails and phone numbers.   |
+                    email_options:
+                      description: Types of emails to return.
+                      type: object
+                      properties:
+                        accept_work:
+                          type: boolean
+                          description: Professional email address, i.e. tim.cooke@apple.com
+                        accept_personal:
+                          type: boolean
+                          description: A personal email address, i.e. tcooke1960@gmail.com
+                        accept_generic:
+                          type: boolean
+                          description: A generic email address, i.e. hello@apple.com
+                    skip_duplicates:
+                      type: boolean
+                      description: Skip contacts previously found in other api lists.
+                        Contacts will be marked as duplicates and not processed.
+                    callback_url:
+                      type: string
+                      description: URL to send the list update to. If not provided,
+                        the default webhook URL configured in your account settings
+                        will be used.
+                  example:
+                    name: VP of Sales in San Francisco
+                    max_profiles: 10
+                    enrichment_level: partial
+                    email_options:
+                      accept_work: true
+                      accept_personal: true
+                      accept_generic: true
+                filters:
+                  type: object
+                  properties:
+                    first_name:
+                      type: array
+                      items:
+                        type: string
+                      description: exact match of first name
+                      example:
+                      - John
+                      - Jane
+                    last_name:
+                      type: array
+                      items:
+                        type: string
+                      description: exact match of last name
+                      example:
+                      - Smith
+                    job_title:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          v:
+                            type: string
+                            description: Job title to search
+                            example: CEO
+                          s:
+                            type: string
+                            description: whether to include or exclude the job title
+                            enum:
+                            - i
+                            - e
+                      description: a list of job titles to include/exclude. If you
+                        want an exact title match, use double quotes around your search.
+                        e.g. '"account manager"'
+                    job_title_level:
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                        - CXO
+                        - Director
+                        - Entry
+                        - Manager
+                        - Owner
+                        - Partner
+                        - Senior
+                        - Training
+                        - Unpaid
+                        - VP
+                      description: ''
+                    job_role:
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                        - customer_service
+                        - design
+                        - education
+                        - engineering
+                        - finance
+                        - health
+                        - human_resources
+                        - legal
+                        - marketing
+                        - media
+                        - operations
+                        - public_relations
+                        - real_estate
+                        - sales
+                        - trades
+                      description: ''
+                    job_sub_role:
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                        - accounting
+                        - accounts
+                        - brand_marketing
+                        - broadcasting
+                        - business_development
+                        - compensation
+                        - content_marketing
+                        - customer_success
+                        - data
+                        - dental
+                        - devops
+                        - doctor
+                        - editorial
+                        - education_administration
+                        - electrical
+                        - employee_development
+                        - events
+                        - fitness
+                        - graphic_design
+                        - information_technology
+                        - instructor
+                        - investment
+                        - journalism
+                        - judicial
+                        - lawyer
+                        - logistics
+                        - marketing_communications
+                        - mechanical
+                        - media_relations
+                        - network
+                        - nursing
+                        - office_management
+                        - paralegal
+                        - pipeline
+                        - product
+                        - product_design
+                        - product_marketing
+                        - professor
+                        - project_engineering
+                        - project_management
+                        - property_management
+                        - quality_assurance
+                        - realtor
+                        - recruiting
+                        - researcher
+                        - security
+                        - software
+                        - support
+                        - systems
+                        - tax
+                        - teacher
+                        - therapy
+                        - video
+                        - web
+                        - web_design
+                        - wellness
+                        - writing
+                      description: ''
+                    location:
+                      type: array
+                      items:
+                        "$ref": "#/components/schemas/Location"
+                      example:
+                        v: Toronto, Ontario, Canada
+                        b: city
+                        s: i
+                      description: |-
+                        >
+                        | location type   | format of name input  |
+                        |-----------|-----------------------------|
+                        | city      | 'city, state, country'      |
+                        | state     | 'state, country'            |
+                        | country   | 'country'                   |
+                    skill:
+                      type: array
+                      items:
+                        type: string
+                      description: ''
+                    school:
+                      type: array
+                      items:
+                        type: string
+                      description: exact match of school name
+                    major:
+                      type: array
+                      items:
+                        type: string
+                      description: ''
+                    linkedin_slug:
+                      type: array
+                      items:
+                        type: string
+                      description: Can be in the format `https://linkedin.com/in/stephen-hakami-5babb21b0`
+                        or `stephen-hakami-5babb21b0`
+                      example:
+                      - stephen-hakami-5babb21b0
+                      - https://linkedin.com/in/stephen-hakami-5babb21b0
+                    job_company:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          v:
+                            type: string
+                            description: Company name
+                            example: Wiza
+                          s:
+                            type: string
+                            description: whether to include or exclude the company
+                              name
+                            enum:
+                            - i
+                            - e
+                      example:
+                      - v: Wiza
+                        s: i
+                      description: a list of company names to include/exclude
+                    past_company:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          v:
+                            type: string
+                            description: Company name
+                            example: Wiza
+                          s:
+                            type: string
+                            description: whether to include or exclude the company
+                              name
+                            enum:
+                            - i
+                            - e
+                      example:
+                      - v: Wiza
+                        s: i
+                      description: a list of past company names to include/exclude.
+                        Note that this will return people who used to work at the
+                        company AND people who currently work at the company. If you
+                        want to exclude people who currently work at the company,
+                        use the `job_company` filter with the exclude flag.
+                    company_location:
+                      type: array
+                      items:
+                        "$ref": "#/components/schemas/Location"
+                      example:
+                      - v: Toronto, Ontario, Canada
+                        b: city
+                        s: e
+                      description: |-
+                        >
+                        | location type   | format of name input  |
+                        |-----------|-----------------------------|
+                        | city      | 'city, state, country'      |
+                        | state     | 'state, country'            |
+                        | country   | 'country'                   |
+                    company_industry:
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                        - accounting
+                        - airlines/aviation
+                        - alternative dispute resolution
+                        - alternative medicine
+                        - animation
+                        - apparel & fashion
+                        - architecture & planning
+                        - arts and crafts
+                        - automotive
+                        - aviation & aerospace
+                        - banking
+                        - biotechnology
+                        - broadcast media
+                        - building materials
+                        - business supplies and equipment
+                        - capital markets
+                        - chemicals
+                        - civic & social organization
+                        - civil engineering
+                        - commercial real estate
+                        - computer & network security
+                        - computer games
+                        - computer hardware
+                        - computer networking
+                        - computer software
+                        - construction
+                        - consumer electronics
+                        - consumer goods
+                        - consumer services
+                        - cosmetics
+                        - dairy
+                        - defense & space
+                        - design
+                        - e-learning
+                        - education management
+                        - electrical/electronic manufacturing
+                        - entertainment
+                        - environmental services
+                        - events services
+                        - executive office
+                        - facilities services
+                        - farming
+                        - financial services
+                        - fine art
+                        - fishery
+                        - food & beverages
+                        - food production
+                        - fund-raising
+                        - furniture
+                        - gambling & casinos
+                        - government administration
+                        - government relations
+                        - graphic design
+                        - health, wellness and fitness
+                        - higher education
+                        - hospital & health care
+                        - hospitality
+                        - human resources
+                        - import and export
+                        - individual & family services
+                        - industrial automation
+                        - information services
+                        - information technology and services
+                        - insurance
+                        - international affairs
+                        - international trade and development
+                        - internet
+                        - investment banking
+                        - investment management
+                        - judiciary
+                        - law enforcement
+                        - law practice
+                        - legal services
+                        - legislative office
+                        - libraries
+                        - logistics and supply chain
+                        - luxury goods & jewelry
+                        - machinery
+                        - management consulting
+                        - maritime
+                        - market research
+                        - marketing and advertising
+                        - mechanical or industrial engineering
+                        - media production
+                        - medical devices
+                        - medical practice
+                        - mental health care
+                        - military
+                        - mining & metals
+                        - motion pictures and film
+                        - museums and institutions
+                        - music
+                        - nanotechnology
+                        - newspapers
+                        - non-profit organization management
+                        - oil & energy
+                        - online media
+                        - outsourcing/offshoring
+                        - package/freight delivery
+                        - packaging and containers
+                        - paper & forest products
+                        - performing arts
+                        - pharmaceuticals
+                        - philanthropy
+                        - photography
+                        - plastics
+                        - political organization
+                        - primary/secondary education
+                        - printing
+                        - professional training & coaching
+                        - program development
+                        - public policy
+                        - public relations and communications
+                        - public safety
+                        - publishing
+                        - railroad manufacture
+                        - ranching
+                        - real estate
+                        - recreational facilities and services
+                        - religious institutions
+                        - renewables & environment
+                        - research
+                        - restaurants
+                        - retail
+                        - security and investigations
+                        - semiconductors
+                        - shipbuilding
+                        - sporting goods
+                        - sports
+                        - staffing and recruiting
+                        - supermarkets
+                        - telecommunications
+                        - textiles
+                        - think tanks
+                        - tobacco
+                        - translation and localization
+                        - transportation/trucking/railroad
+                        - utilities
+                        - venture capital & private equity
+                        - veterinary
+                        - warehousing
+                        - wholesale
+                        - wine and spirits
+                        - wireless
+                        - writing and editing
+                      description: ''
+                    company_size:
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                        - 1-10
+                        - 11-50
+                        - 51-200
+                        - 201-500
+                        - 501-1000
+                        - 1001-5000
+                        - 5001-10000
+                        - 10001+
+                      description: Company Headcount
+                    company_annual_growth:
+                      type: string
+                      enum:
+                      - 0-5%
+                      - 5-10%
+                      - 10-20%
+                      - 20-50%
+                      - 50-100%
+                      - 100%+
+                      description: Company Headcount Annual Growth
+                    department_size:
+                      type: array
+                      items:
+                        type: string
+                      description: |-
+                        >
+                        Department Headcount, the format is `{department_name}:{min_headcount}-{max_headcount}` e.g. `sales:10-50`
+
+                        For less than or greater than, use `min_headcount-` or `-max_headcount` e.g. `sales:10-` or `sales:-50`
+
+                        Available department names:
+                        | department_name |
+                        |-----------------|
+                        | legal |
+                        | media |
+                        | sales |
+                        | design |
+                        | health |
+                        | trades |
+                        | finance |
+                        | education |
+                        | marketing |
+                        | operations |
+                        | engineering |
+                        | real_estate |
+                        | human_resources |
+                        | customer_service |
+                        | public_relations |
+                      example:
+                      - sales:10-50
+                    revenue:
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                        - "$0-$1M"
+                        - "$1M-$10M"
+                        - "$10M-$25M"
+                        - "$25M-$50M"
+                        - "$50M-$100M"
+                        - "$100M-$250M"
+                        - "$250M-$500M"
+                        - "$500M-$1B"
+                        - "$1B-$10B"
+                        - "$10B+"
+                      description: Company Revenue
+                    funding_date:
+                      type: object
+                      properties:
+                        t:
+                          type: string
+                          enum:
+                          - last
+                          - any
+                          description: Whether the funding date is the last round's
+                            funding date or any funding date
+                        v:
+                          type: string
+                          enum:
+                          - 60d
+                          - 90d
+                          - 180d
+                          - 270d
+                          - 1y
+                          description: Funding Date Range
+                      description: Company Funding Date
+                    last_funding_min:
+                      type: string
+                      enum:
+                      - "$500K"
+                      - "$1M"
+                      - "$5M"
+                      - "$10M"
+                      - "$25M"
+                      - "$50M"
+                      - "$100M"
+                      - "$250M"
+                      - "$500M"
+                      - "$1B"
+                      description: Company Last Funding Amount Min
+                    last_funding_max:
+                      type: string
+                      enum:
+                      - "$500K"
+                      - "$1M"
+                      - "$5M"
+                      - "$10M"
+                      - "$25M"
+                      - "$50M"
+                      - "$100M"
+                      - "$250M"
+                      - "$500M"
+                      - "$1B"
+                      description: Company Last Funding Amount Max
+                    funding_min:
+                      type: string
+                      enum:
+                      - "$500K"
+                      - "$1M"
+                      - "$5M"
+                      - "$10M"
+                      - "$25M"
+                      - "$50M"
+                      - "$100M"
+                      - "$250M"
+                      - "$500M"
+                      - "$1B"
+                      description: Company Total Funding Amount Min
+                    funding_max:
+                      type: string
+                      enum:
+                      - "$500K"
+                      - "$1M"
+                      - "$5M"
+                      - "$10M"
+                      - "$25M"
+                      - "$50M"
+                      - "$100M"
+                      - "$250M"
+                      - "$500M"
+                      - "$1B"
+                      description: Company Total Funding Amount Max
+                    funding_stage:
+                      type: object
+                      properties:
+                        t:
+                          type: string
+                          enum:
+                          - last
+                          - any
+                          description: Whether the funding stage is the last round's
+                            funding stage or any funding stage
+                        v:
+                          type: array
+                          items:
+                            type: string
+                            enum:
+                            - pre_seed
+                            - seed
+                            - series_a
+                            - series_b
+                            - series_c
+                            - series_d
+                            - series_e-j
+                            - other
+                          description: Funding Stage
+                      description: Company Funding Stage
+                    funding_type:
+                      type: object
+                      properties:
+                        t:
+                          type: string
+                          enum:
+                          - last
+                          - any
+                          description: Whether the funding type is the last round's
+                            funding type or any funding type
+                        v:
+                          type: array
+                          items:
+                            type: string
+                            enum:
+                            - angel
+                            - venture
+                            - grant
+                            - debt_financing
+                            - private_equity
+                            - crowdfunding
+                            - other
+                          description: Funding Type
+                      description: Company Funding Type
+                    company_type:
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                        - private
+                        - public
+                        - educational
+                        - government
+                        - nonprofit
+                        - public_subsidiary
+                      description: Company Type
+                    company_summary:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          v:
+                            type: string
+                            description: Words to search in the company summary
+                            example: cutting-edge
+                          s:
+                            type: string
+                            description: whether to include or exclude the words
+                            enum:
+                            - i
+                            - e
+                      description: a list of words to include/exclude in the company
+                        summary
+                    year_founded_start:
+                      type: string
+                      example: '2020'
+                      description: Company Year Founded Start
+                    year_founded_end:
+                      type: string
+                      example: '2024'
+                      description: Company Year Founded End
+  "/api/prospects/continue_search":
+    post:
+      summary: Continue prospect search
+      description: Continue with your previous search
+      security:
+      - bearer_auth: []
+      parameters: []
+      x-codeSamples:
+      - lang: Javascript
+        source: |
+          const apiKey = "your api key here" // update with your api_key
+          const listId = 0 // update with the ID of the list you would like to continue searching
+
+          const myHeaders = new Headers();
+          myHeaders.append('Content-Type', 'application/json');
+          myHeaders.append('Authorization', `Bearer ${apiKey}`);
+
+          const raw = JSON.stringify({
+            'id': listId
+          });
+
+          const requestOptions = {
+            method: 'POST',
+            headers: myHeaders,
+            body: raw,
+            redirect: 'follow'
+          };
+
+          fetch('https://wiza.co/api/prospects/continue_search', requestOptions)
+            .then((response) => response.text())
+            .then((result) => console.log(result))
+            .catch((error) => console.error(error));
+      - lang: Python
+        source: |
+          import http.client
+          import json
+
+          api_key = "your api key here" # update with your api_key
+          list_id = 0 # update with the ID of the list you would like to continue searching
+
+          conn = http.client.HTTPSConnection('wiza.co')
+          payload = json.dumps({
+            'id': list_id
+          })
+          authorization = ("Bearer {api_key}").format(api_key=api_key)
+          headers = {
+            'Content-Type': 'application/json',
+            'Authorization': authorization
+          }
+          conn.request('POST', '/api/prospects/continue_search', payload, headers)
+          res = conn.getresponse()
+          data = res.read()
+          print(data.decode('utf-8'))
+      - lang: Ruby
+        source: |
+          require 'uri'
+          require 'json'
+          require 'net/http'
+
+          api_key = "your api key here" # update with your api_key
+          list_id = 0 # update with the ID of the list you would like to continue searching
+
+          url = URI('https://wiza.co/api/prospects/continue_search')
+
+          https = Net::HTTP.new(url.host, url.port);
+          https.use_ssl = true
+          request = Net::HTTP::Post.new(url)
+          request['Content-Type'] = 'application/json'
+          request['Authorization'] = "Bearer #{api_key}"
+          request.body = JSON.dump({
+            'id': list_id
+          })
+
+          response = https.request(request)
+          puts response.read_body
+      - lang: Curl
+        source: |
+          api_key="your api key here" # update with your api_key
+          list_id=0 # update with the ID of the list you would like to continue searching
+
+          curl --location 'https://wiza.co/api/prospects/continue_search' --header 'Content-Type: application/json' --header "Authorization: Bearer ${api_key}" --data '{"id": "'$list_id'"}'
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ListResponse"
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 404
+                  message:
+                    type: string
+                    example: List not found
+        '401':
+          description: Unauthorized
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - id
+              properties:
+                id:
+                  type: integer
+                  description: ID of the list you would like to continue searching
+                  example: 123
+                max_profiles:
+                  type: integer
+                  description: The number of results to return, defaults to previous
+                    list's `max_profiles`
+                  example: 10
+                callback_url:
+                  type: string
+                  description: URL to send the list update to. If not provided, the
+                    default webhook URL configured in your account settings will be
+                    used.
+              example:
+                id: 123
+                max_profiles: 10
+  "/api/meta/credits":
+    get:
+      summary: Get Credits
+      description: Get the number of credits remaining in your account.
+      security:
+      - bearer_auth: []
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CreditsResponse"
+        '401':
+          description: Unauthorized
+servers:
+- url: https://wiza.co
+  variables:
+    defaultHost:
+      default: wiza.co
