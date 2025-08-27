@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Contact } from '@/types/contact';
 import { isValidLinkedInUrl, extractContactFromLinkedIn } from '@/utils/extraction';
-import { extractContactsInParallel } from '@/utils/wiza';
+// Bulk extraction now routed through server API to keep API keys private
 import { saveContact, getStoredContacts, clearStoredContacts } from '@/utils/storage';
 import { generateCSV, downloadCSV } from '@/utils/csv';
 import { useLanguage, interpolate } from '@/contexts/LanguageContext';
@@ -69,23 +69,30 @@ const ContactExtractor: React.FC = () => {
     showFeedback('info', `Processing ${urls.length} prospect URLs...`);
 
     try {
-      const results = await extractContactsInParallel(urls, (current, total) => {
-        setBulkProgress({ current, total });
+      const resp = await fetch('/api/bulk/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls })
       });
-      
+
+      const data = await resp.json();
+      if (!resp.ok || !data.success) {
+        throw new Error(data.error || 'Bulk extraction failed');
+      }
+
       const extractedContacts: Contact[] = [];
       let successCount = 0;
       let failedCount = 0;
 
-      results.forEach((result, url) => {
-        if (result.success && result.contact) {
-          extractedContacts.push(result.contact);
-          saveContact(result.contact);
+      for (const item of data.results as Array<{ url: string; success: boolean; contact?: Contact }>) {
+        if (item.success && item.contact) {
+          extractedContacts.push(item.contact);
+          saveContact(item.contact);
           successCount++;
         } else {
           failedCount++;
         }
-      });
+      }
 
       // Update the contacts state
       const updatedContacts = [...contacts, ...extractedContacts];
@@ -259,40 +266,39 @@ const ContactExtractor: React.FC = () => {
       setIsExtracting(true);
       setBulkProgress({ current: 0, total: validUrls.length });
 
-      // Use parallel extraction for bulk URLs
+      // Use server-side bulk extraction API
       try {
-        console.log(`Starting parallel extraction for ${validUrls.length} URLs using all available API keys`);
-        showFeedback('info', `🚀 Processing ${validUrls.length} URLs in parallel for faster extraction...`);
-        
-        const results = await extractContactsInParallel(validUrls, (current, total) => {
-          setBulkProgress({ current, total });
+        console.log(`Starting server-side bulk extraction for ${validUrls.length} URLs`);
+        showFeedback('info', `🚀 Processing ${validUrls.length} URLs on server for faster extraction...`);
+
+        const resp = await fetch('/api/bulk/extract', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urls: validUrls })
         });
-        
-        console.log(`Parallel extraction completed. Results size: ${results.size}`);
-        
+
+        const data = await resp.json();
+        if (!resp.ok || !data.success) {
+          throw new Error(data.error || 'Bulk extraction failed');
+        }
+
         const extractedContacts: Contact[] = [];
         let successCount = 0;
         let failedCount = 0;
 
-        // Iterate through the results Map properly
-        results.forEach((result, url) => {
-          if (result.success && result.contact) {
-            extractedContacts.push(result.contact);
-            saveContact(result.contact);
+        for (const item of data.results as Array<{ url: string; success: boolean; contact?: Contact }>) {
+          if (item.success && item.contact) {
+            extractedContacts.push(item.contact);
+            saveContact(item.contact);
             successCount++;
-            // Don't log personal data for privacy
           } else {
             failedCount++;
-            console.error(`❌ Failed to extract contact`);
           }
-        });
-
-        console.log(`Bulk extraction summary: ${successCount} successful, ${failedCount} failed`);
+        }
 
         // Update the contacts state with all new contacts
         setContacts(prevContacts => {
           const allContacts = [...prevContacts, ...extractedContacts];
-          // Remove duplicates based on linkedinUrl
           const uniqueContacts = allContacts.filter((contact, index, self) =>
             index === self.findIndex((c) => c.linkedinUrl === contact.linkedinUrl)
           );
