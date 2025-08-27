@@ -1,5 +1,4 @@
 import { Contact, ExtractionResult } from '@/types/contact';
-import { extractContactWithWiza } from './wiza';
 
 // Generate unique ID for contacts
 export const generateContactId = (): string => {
@@ -85,7 +84,8 @@ export const extractContactFromLinkedIn = async (linkedinUrl: string): Promise<E
     };
   }
 
-  return await extractContactWithWiza(linkedinUrl);
+  // Always use server API to keep API keys private and avoid client env issues
+  return await extractContactFromAPI(linkedinUrl);
 };
 
 // Check if Wiza API is configured

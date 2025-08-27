@@ -22,6 +22,7 @@ const ContactExtractor: React.FC = () => {
   // Configuration constants
   const API_CONFIG_CHECK_INTERVAL = 30000; // 30 seconds
   const MAX_BULK_URLS = 500; // Maximum URLs for bulk extraction
+  const BULK_BATCH_SIZE = 25; // Process in chunks so progress can update
   // Parallel processing uses multiple API keys simultaneously, no delay needed
 
   // Load contacts from localStorage on component mount
@@ -69,29 +70,38 @@ const ContactExtractor: React.FC = () => {
     showFeedback('info', `Processing ${urls.length} prospect URLs...`);
 
     try {
-      const resp = await fetch('/api/bulk/extract', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls })
-      });
-
-      const data = await resp.json();
-      if (!resp.ok || !data.success) {
-        throw new Error(data.error || 'Bulk extraction failed');
-      }
-
+      const total = urls.length;
+      const batchSize = total <= 25 ? 1 : BULK_BATCH_SIZE;
+      let processed = 0;
       const extractedContacts: Contact[] = [];
       let successCount = 0;
       let failedCount = 0;
 
-      for (const item of data.results as Array<{ url: string; success: boolean; contact?: Contact }>) {
-        if (item.success && item.contact) {
-          extractedContacts.push(item.contact);
-          saveContact(item.contact);
-          successCount++;
-        } else {
-          failedCount++;
+      for (let i = 0; i < urls.length; i += batchSize) {
+        const chunk = urls.slice(i, i + batchSize);
+        const resp = await fetch('/api/bulk/extract', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urls: chunk })
+        });
+
+        const data = await resp.json();
+        if (!resp.ok || !data.success) {
+          throw new Error(data.error || 'Bulk extraction failed');
         }
+
+        for (const item of data.results as Array<{ url: string; success: boolean; contact?: Contact }>) {
+          if (item.success && item.contact) {
+            extractedContacts.push(item.contact);
+            saveContact(item.contact);
+            successCount++;
+          } else {
+            failedCount++;
+          }
+        }
+
+        processed += chunk.length;
+        setBulkProgress({ current: processed, total });
       }
 
       // Update the contacts state
@@ -266,34 +276,43 @@ const ContactExtractor: React.FC = () => {
       setIsExtracting(true);
       setBulkProgress({ current: 0, total: validUrls.length });
 
-      // Use server-side bulk extraction API
+      // Use server-side bulk extraction API in batches so progress updates
       try {
         console.log(`Starting server-side bulk extraction for ${validUrls.length} URLs`);
         showFeedback('info', `🚀 Processing ${validUrls.length} URLs on server for faster extraction...`);
 
-        const resp = await fetch('/api/bulk/extract', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ urls: validUrls })
-        });
-
-        const data = await resp.json();
-        if (!resp.ok || !data.success) {
-          throw new Error(data.error || 'Bulk extraction failed');
-        }
-
+        const total = validUrls.length;
+        const batchSize = total <= 25 ? 1 : BULK_BATCH_SIZE;
+        let processed = 0;
         const extractedContacts: Contact[] = [];
         let successCount = 0;
         let failedCount = 0;
 
-        for (const item of data.results as Array<{ url: string; success: boolean; contact?: Contact }>) {
-          if (item.success && item.contact) {
-            extractedContacts.push(item.contact);
-            saveContact(item.contact);
-            successCount++;
-          } else {
-            failedCount++;
+        for (let i = 0; i < validUrls.length; i += batchSize) {
+          const chunk = validUrls.slice(i, i + batchSize);
+          const resp = await fetch('/api/bulk/extract', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ urls: chunk })
+          });
+
+          const data = await resp.json();
+          if (!resp.ok || !data.success) {
+            throw new Error(data.error || 'Bulk extraction failed');
           }
+
+          for (const item of data.results as Array<{ url: string; success: boolean; contact?: Contact }>) {
+            if (item.success && item.contact) {
+              extractedContacts.push(item.contact);
+              saveContact(item.contact);
+              successCount++;
+            } else {
+              failedCount++;
+            }
+          }
+
+          processed += chunk.length;
+          setBulkProgress({ current: processed, total });
         }
 
         // Update the contacts state with all new contacts
