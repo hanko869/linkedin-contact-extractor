@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { extractContactWithWiza } from '@/utils/wiza';
+import { extractContactWithWiza, getConfiguredWizaApiKeyCount } from '@/utils/wiza';
 import { getUser } from '@/utils/auth';
 import { logActivity } from '@/utils/userDb';
 
 export async function GET() {
   // Check if environment variables are loaded
-  const apiKey = process.env.WIZA_API_KEY;
-  const hasApiKey = !!apiKey;
+  const apiKeyCount = getConfiguredWizaApiKeyCount();
+  const hasApiKey = apiKeyCount > 0;
   
   // Only log in development if there's an issue
   if (!hasApiKey && process.env.NODE_ENV === 'development') {

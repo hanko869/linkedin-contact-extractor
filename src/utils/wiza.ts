@@ -1,18 +1,20 @@
 import { Contact, ExtractionResult } from '@/types/contact';
 import { generateContactId } from './extraction';
 
-// API Key management
-const API_KEYS = [
-  process.env.WIZA_API_KEY || 'c951d1f0b91ab7e5afe187fa747f3668524ad5e2eba2c68a912654b43682cab8',
-  process.env.WIZA_API_KEY_2 || '2ac8378b7aa63804c7d7a57d7e9777600325895beb8410022529c70132bbf61b'
-].filter(key => key && key.length > 0);
+// API Key management (dynamic: load all env vars starting with WIZA_API_KEY)
+const API_KEYS = Object.keys(process.env)
+  .filter((key) => key === 'WIZA_API_KEY' || key.startsWith('WIZA_API_KEY_'))
+  .map((key) => (process.env as Record<string, string | undefined>)[key])
+  .filter((val): val is string => typeof val === 'string' && val.length > 0);
 
 console.log(`🔑 Initialized with ${API_KEYS.length} Wiza API keys`);
 // Don't log API keys for security
 
 // Check if we're in development without proper API keys
 const isDevelopment = process.env.NODE_ENV === 'development';
-const hasRealApiKeys = process.env.WIZA_API_KEY || process.env.WIZA_API_KEY_2;
+
+// Export helper to report configured API key count without exposing values
+export const getConfiguredWizaApiKeyCount = (): number => API_KEYS.length;
 
 // API Key health tracking
 interface ApiKeyHealth {

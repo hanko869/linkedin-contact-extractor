@@ -30,6 +30,22 @@ const ContactExtractor: React.FC = () => {
     // Assume API is configured - we'll handle errors when actually extracting
     setApiConfigured(true);
     
+    // Check for pending prospect extraction from prospects page
+    const pendingExtraction = localStorage.getItem('pendingProspectExtraction');
+    if (pendingExtraction) {
+      try {
+        const urls = JSON.parse(pendingExtraction);
+        localStorage.removeItem('pendingProspectExtraction');
+        
+        // Process the URLs as a bulk extraction
+        if (Array.isArray(urls) && urls.length > 0) {
+          handleBulkExtraction(urls);
+        }
+      } catch (error) {
+        console.error('Error processing pending prospects:', error);
+      }
+    }
+    
     // Debug: Log initial state
     console.log('ContactExtractor mounted. Initial linkedinUrl:', linkedinUrl);
     console.log('Is extracting:', isExtracting);
@@ -38,6 +54,55 @@ const ContactExtractor: React.FC = () => {
   const showFeedback = (type: 'success' | 'error' | 'info' | 'warning', message: string) => {
     setFeedback({ type, message });
     setTimeout(() => setFeedback(null), 7000);
+  };
+
+  const handleBulkExtraction = async (urls: string[]) => {
+    if (!urls || urls.length === 0) return;
+
+    if (urls.length > MAX_BULK_URLS) {
+      showFeedback('error', `Too many URLs. Maximum ${MAX_BULK_URLS} allowed.`);
+      return;
+    }
+
+    setIsExtracting(true);
+    setBulkProgress({ current: 0, total: urls.length });
+    showFeedback('info', `Processing ${urls.length} prospect URLs...`);
+
+    try {
+      const results = await extractContactsInParallel(urls, (current, total) => {
+        setBulkProgress({ current, total });
+      });
+      
+      const extractedContacts: Contact[] = [];
+      let successCount = 0;
+      let failedCount = 0;
+
+      results.forEach((result, url) => {
+        if (result.success && result.contact) {
+          extractedContacts.push(result.contact);
+          saveContact(result.contact);
+          successCount++;
+        } else {
+          failedCount++;
+        }
+      });
+
+      // Update the contacts state
+      const updatedContacts = [...contacts, ...extractedContacts];
+      setContacts(updatedContacts);
+
+      if (successCount > 0) {
+        showFeedback('success', `Successfully extracted ${successCount} contacts${failedCount > 0 ? ` (${failedCount} failed)` : ''}`);
+      } else {
+        showFeedback('error', 'Failed to extract any contacts');
+      }
+    } catch (error) {
+      console.error('Bulk extraction error:', error);
+      showFeedback('error', error instanceof Error ? error.message : 'Bulk extraction failed');
+    } finally {
+      setIsExtracting(false);
+      setBulkProgress(null);
+    }
   };
 
   const handleExtractContact = async () => {
