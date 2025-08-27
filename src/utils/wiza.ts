@@ -29,6 +29,11 @@ interface ApiKeyHealth {
 // Track health status of each API key
 const apiKeyHealthMap: Map<string, ApiKeyHealth> = new Map();
 
+// Per-key concurrency and rate limit handling
+const CONCURRENCY_PER_KEY: number = Number(process.env.WIZA_CONCURRENCY_PER_KEY || '2');
+const RATE_LIMIT_COOLDOWN_MS: number = Number(process.env.WIZA_RATE_LIMIT_COOLDOWN_MS || '10000');
+const keyCooldownUntil: Map<string, number> = new Map();
+
 // Initialize health tracking for all keys
 API_KEYS.forEach((key, index) => {
   apiKeyHealthMap.set(key, {
@@ -185,10 +190,20 @@ async function executeInParallel<T>(
   let completedCount = 0;
   const totalCount = linkedinUrls.length;
 
-  // Process URLs with each healthy API key
+  // Process URLs with each healthy API key, allowing multiple workers per key
   for (const keyHealth of healthyKeys) {
+    const spawnWorkers = Math.max(1, CONCURRENCY_PER_KEY);
+
     const processWithKey = async () => {
-      while (urlQueue.length > 0) {
+      while (true) {
+        // Respect cooldown for this key if we recently hit a rate limit
+        const cooldownUntil = keyCooldownUntil.get(keyHealth.key) || 0;
+        const now = Date.now();
+        if (cooldownUntil > now) {
+          await new Promise(resolve => setTimeout(resolve, Math.min(1000, cooldownUntil - now)));
+          continue;
+        }
+
         const url = urlQueue.shift();
         if (!url) break;
 
@@ -197,32 +212,52 @@ async function executeInParallel<T>(
           const result = await operation(url, keyHealth.key);
           results.set(url, result);
           markApiKeySuccess(keyHealth.key);
-          
+
           // Update progress
           completedCount++;
           if (onProgress) {
             onProgress(completedCount, totalCount);
           }
         } catch (error: any) {
-          console.error(`Failed to process ${url}:`, error.message);
-          markApiKeyFailed(keyHealth.key);
-          
-          // Put the URL back in the queue if API key failed
+          const message: string = (error?.message || '').toString();
+          console.error(`Failed to process ${url}:`, message);
+
+          // Handle explicit rate limiting without marking the key unhealthy
+          if (message.includes('429') || message.toLowerCase().includes('rate limit')) {
+            keyCooldownUntil.set(keyHealth.key, Date.now() + RATE_LIMIT_COOLDOWN_MS);
+            // Re-queue for later attempt
+            urlQueue.push(url);
+            continue;
+          }
+
+          // If the key is out of credits, mark it unhealthy and let other keys pick it up
+          if (message.includes('out of credits') || message.includes('402')) {
+            markApiKeyFailed(keyHealth.key);
+            if (getHealthyApiKeys().length > 0) {
+              urlQueue.push(url);
+              continue;
+            }
+          }
+
+          // For other transient errors, re-queue so another key or later retry can handle it
           if (getHealthyApiKeys().length > 0) {
             urlQueue.push(url);
-          } else {
-            // Update progress even for failed URLs
-            completedCount++;
-            if (onProgress) {
-              onProgress(completedCount, totalCount);
-            }
-            throw new Error(`Failed to process ${url}: All API keys exhausted`);
+            continue;
           }
+
+          // No healthy keys left: count as completed (failed) and move on without aborting all
+          completedCount++;
+          if (onProgress) {
+            onProgress(completedCount, totalCount);
+          }
+          // Do not throw here to avoid aborting the whole batch
         }
       }
     };
 
-    processingPromises.push(processWithKey());
+    for (let i = 0; i < spawnWorkers; i++) {
+      processingPromises.push(processWithKey());
+    }
   }
 
   // Wait for all parallel operations to complete
@@ -663,8 +698,9 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
     const revealId = revealResponse.data.id.toString();
     console.log(`Starting to poll for reveal ID: ${revealId}`);
     const maxWaitTime = 180000; // 3 minutes max (since extraction can take 2+ minutes)
-    const pollInterval = 3000; // 3 seconds - balanced between speed and API load
     const startTime = Date.now();
+    let pollInterval = 500; // Start fast
+    let pollCount = 0;
 
     while (Date.now() - startTime < maxWaitTime) {
       try {
@@ -824,8 +860,13 @@ export const extractContactWithWiza = async (linkedinUrl: string): Promise<Extra
           // This is common and not a real error
         }
 
-        // Still processing, wait and try again
+        // Still processing, wait and try again (dynamic interval)
         await new Promise(resolve => setTimeout(resolve, pollInterval));
+        pollCount++;
+        if (pollCount === 10 && pollInterval === 500) {
+          // After ~5 seconds, back off to 2s
+          pollInterval = 2000;
+        }
       } catch (pollError) {
         console.error('Error polling reveal status:', pollError);
         // Continue polling despite errors
@@ -1299,8 +1340,9 @@ export const extractContactsInParallel = async (
       
       // Poll for completion
       const maxWaitTime = 180000; // 3 minutes
-      const pollInterval = 5000; // 5 seconds
       const startTime = Date.now();
+      let pollInterval = 500; // Start fast for early completions
+      let pollCount = 0;
 
       while (Date.now() - startTime < maxWaitTime) {
         const statusResponse = await fetch(`${baseUrl}/api/individual_reveals/${revealId}`, {
@@ -1414,6 +1456,10 @@ export const extractContactsInParallel = async (
         }
 
         await new Promise(resolve => setTimeout(resolve, pollInterval));
+        pollCount++;
+        if (pollCount === 10 && pollInterval === 500) {
+          pollInterval = 2000; // Back off after ~5 seconds
+        }
       }
 
       return {
