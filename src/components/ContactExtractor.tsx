@@ -71,37 +71,65 @@ const ContactExtractor: React.FC = () => {
 
     try {
       const total = urls.length;
-      const batchSize = total <= 25 ? 1 : BULK_BATCH_SIZE;
       let processed = 0;
       const extractedContacts: Contact[] = [];
       let successCount = 0;
       let failedCount = 0;
 
-      for (let i = 0; i < urls.length; i += batchSize) {
-        const chunk = urls.slice(i, i + batchSize);
-        const resp = await fetch('/api/bulk/extract', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ urls: chunk })
-        });
+      if (total <= 25) {
+        // Small jobs: fire all requests in parallel (one URL per request) for speed and granular progress
+        await Promise.all(
+          urls.map(async (u) => {
+            const resp = await fetch('/api/bulk/extract', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ urls: [u] })
+            });
+            const data = await resp.json();
+            if (resp.ok && data.success && Array.isArray(data.results)) {
+              const r = data.results[0];
+              if (r?.success && r?.contact) {
+                extractedContacts.push(r.contact as Contact);
+                saveContact(r.contact as Contact);
+                successCount++;
+              } else {
+                failedCount++;
+              }
+            } else {
+              failedCount++;
+            }
+            processed += 1;
+            setBulkProgress({ current: processed, total });
+          })
+        );
+      } else {
+        // Larger jobs: send in batches to reduce overhead
+        for (let i = 0; i < urls.length; i += BULK_BATCH_SIZE) {
+          const chunk = urls.slice(i, i + BULK_BATCH_SIZE);
+          const resp = await fetch('/api/bulk/extract', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ urls: chunk })
+          });
 
-        const data = await resp.json();
-        if (!resp.ok || !data.success) {
-          throw new Error(data.error || 'Bulk extraction failed');
-        }
-
-        for (const item of data.results as Array<{ url: string; success: boolean; contact?: Contact }>) {
-          if (item.success && item.contact) {
-            extractedContacts.push(item.contact);
-            saveContact(item.contact);
-            successCount++;
-          } else {
-            failedCount++;
+          const data = await resp.json();
+          if (!resp.ok || !data.success) {
+            throw new Error(data.error || 'Bulk extraction failed');
           }
-        }
 
-        processed += chunk.length;
-        setBulkProgress({ current: processed, total });
+          for (const item of data.results as Array<{ url: string; success: boolean; contact?: Contact }>) {
+            if (item.success && item.contact) {
+              extractedContacts.push(item.contact);
+              saveContact(item.contact);
+              successCount++;
+            } else {
+              failedCount++;
+            }
+          }
+
+          processed += chunk.length;
+          setBulkProgress({ current: processed, total });
+        }
       }
 
       // Update the contacts state
@@ -282,37 +310,63 @@ const ContactExtractor: React.FC = () => {
         showFeedback('info', `🚀 Processing ${validUrls.length} URLs on server for faster extraction...`);
 
         const total = validUrls.length;
-        const batchSize = total <= 25 ? 1 : BULK_BATCH_SIZE;
         let processed = 0;
         const extractedContacts: Contact[] = [];
         let successCount = 0;
         let failedCount = 0;
 
-        for (let i = 0; i < validUrls.length; i += batchSize) {
-          const chunk = validUrls.slice(i, i + batchSize);
-          const resp = await fetch('/api/bulk/extract', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ urls: chunk })
-          });
+        if (total <= 25) {
+          await Promise.all(
+            validUrls.map(async (u) => {
+              const resp = await fetch('/api/bulk/extract', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ urls: [u] })
+              });
+              const data = await resp.json();
+              if (resp.ok && data.success && Array.isArray(data.results)) {
+                const r = data.results[0];
+                if (r?.success && r?.contact) {
+                  extractedContacts.push(r.contact as Contact);
+                  saveContact(r.contact as Contact);
+                  successCount++;
+                } else {
+                  failedCount++;
+                }
+              } else {
+                failedCount++;
+              }
+              processed += 1;
+              setBulkProgress({ current: processed, total });
+            })
+          );
+        } else {
+          for (let i = 0; i < validUrls.length; i += BULK_BATCH_SIZE) {
+            const chunk = validUrls.slice(i, i + BULK_BATCH_SIZE);
+            const resp = await fetch('/api/bulk/extract', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ urls: chunk })
+            });
 
-          const data = await resp.json();
-          if (!resp.ok || !data.success) {
-            throw new Error(data.error || 'Bulk extraction failed');
-          }
-
-          for (const item of data.results as Array<{ url: string; success: boolean; contact?: Contact }>) {
-            if (item.success && item.contact) {
-              extractedContacts.push(item.contact);
-              saveContact(item.contact);
-              successCount++;
-            } else {
-              failedCount++;
+            const data = await resp.json();
+            if (!resp.ok || !data.success) {
+              throw new Error(data.error || 'Bulk extraction failed');
             }
-          }
 
-          processed += chunk.length;
-          setBulkProgress({ current: processed, total });
+            for (const item of data.results as Array<{ url: string; success: boolean; contact?: Contact }>) {
+              if (item.success && item.contact) {
+                extractedContacts.push(item.contact);
+                saveContact(item.contact);
+                successCount++;
+              } else {
+                failedCount++;
+              }
+            }
+
+            processed += chunk.length;
+            setBulkProgress({ current: processed, total });
+          }
         }
 
         // Update the contacts state with all new contacts

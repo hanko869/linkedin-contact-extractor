@@ -79,18 +79,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Log the extraction activity
-    await logActivity({
-      user_id: userId,
-      username: 'test', // Placeholder username for testing
-      action: 'extract_contact',
-      linkedin_url: linkedinUrl,
-      contact_name: result.contact?.name,
-      success: result.success,
-      details: result.success 
-        ? `Extracted ${result.contact?.name || 'contact'} from LinkedIn`
-        : `Failed: ${result.error || 'Unknown error'}`
-    });
+    // Log the extraction activity (do not fail request if logging fails)
+    try {
+      await logActivity({
+        user_id: userId,
+        username: 'test', // Placeholder username for testing
+        action: 'extract_contact',
+        linkedin_url: linkedinUrl,
+        contact_name: result.contact?.name,
+        success: result.success,
+        details: result.success 
+          ? `Extracted ${result.contact?.name || 'contact'} from LinkedIn`
+          : `Failed: ${result.error || 'Unknown error'}`
+      });
+    } catch (activityError) {
+      console.error('Failed to log activity:', activityError);
+      // Continue without failing the whole request
+    }
 
     if (result.success) {
       return NextResponse.json({ 
