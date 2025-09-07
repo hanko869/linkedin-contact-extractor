@@ -1,7 +1,29 @@
 import Papa from 'papaparse';
 import { Contact } from '@/types/contact';
 
-export const generateCSV = (contacts: Contact[]): string => {
+// Overloaded function for prospect search data
+export function generateCSV(data: Record<string, any>[], headers: Record<string, string>): string;
+// Original function for contact extractor
+export function generateCSV(contacts: Contact[]): string;
+export function generateCSV(dataOrContacts: any[], headers?: Record<string, string>): string {
+  // If headers are provided, it's prospect search data
+  if (headers) {
+    const data = dataOrContacts as Record<string, any>[];
+    return Papa.unparse(data, {
+      header: true,
+      columns: Object.keys(headers),
+      transform: {
+        // Transform column headers
+        ...Object.entries(headers).reduce((acc, [key, displayName]) => {
+          acc[key] = displayName;
+          return acc;
+        }, {} as Record<string, string>)
+      }
+    });
+  }
+  
+  // Otherwise, use the original contact extractor logic
+  const contacts = dataOrContacts as Contact[];
   // Find the maximum number of emails and phones across all contacts
   let maxEmails = 0;
   let maxPhones = 0;

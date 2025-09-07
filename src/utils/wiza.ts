@@ -16,6 +16,9 @@ const isDevelopment = process.env.NODE_ENV === 'development';
 // Export helper to report configured API key count without exposing values
 export const getConfiguredWizaApiKeyCount = (): number => API_KEYS.length;
 
+// Export helper to get all API keys for parallel processing
+export const getAllApiKeys = (): string[] => [...API_KEYS];
+
 // API Key health tracking
 interface ApiKeyHealth {
   key: string;
@@ -402,6 +405,8 @@ interface ProspectProfile {
   job_company_name?: string;
   job_company_website?: string;
   location_name?: string;
+  school?: string;
+  major?: string;
 }
 
 interface ProspectSearchResponse {
@@ -1062,12 +1067,12 @@ export const extractContactWithWizaIndividual = async (linkedinUrl: string): Pro
   }
 };
 
-// Search for prospects
+// Search for prospects with tag-based parameters
 export const searchProspects = async (
-  firstName?: string,
-  lastName?: string,
-  jobTitle?: string,
-  location?: string,
+  firstNames?: string[],
+  lastNames?: string[],
+  jobTitles?: string[],
+  locations?: string[],
   size: number = 20
 ): Promise<ProspectSearchResponse> => {
   const apiKey = getBestApiKey();
@@ -1080,55 +1085,52 @@ export const searchProspects = async (
   // Build filters object
   const filters: ProspectSearchFilters = {};
 
-  if (firstName) {
-    filters.first_name = [firstName.trim()];
+  if (firstNames && firstNames.length > 0) {
+    filters.first_name = firstNames.map(name => name.trim()).filter(name => name.length > 0);
   }
 
-  if (lastName) {
-    filters.last_name = [lastName.trim()];
+  if (lastNames && lastNames.length > 0) {
+    filters.last_name = lastNames.map(name => name.trim()).filter(name => name.length > 0);
   }
 
-  if (jobTitle) {
-    filters.job_title = [{
-      v: jobTitle.trim(),
-      s: 'i' // include
-    }];
+  if (jobTitles && jobTitles.length > 0) {
+    filters.job_title = jobTitles.map(title => ({
+      v: title.trim(),
+      s: 'i' as const // include
+    })).filter(item => item.v.length > 0);
   }
 
-  if (location) {
-    // Parse location format and determine type
-    const locationValue = location.trim();
-    const parts = locationValue.split(',').map(p => p.trim());
+  if (locations && locations.length > 0) {
+    filters.location = locations.map(location => {
+      const locationValue = location.trim();
+      const parts = locationValue.split(',').map(p => p.trim());
+      
+      let locationType: 'city' | 'state' | 'country';
+      let formattedLocation: string;
+      
+      if (parts.length >= 3) {
+        // Format: "city, state, country" - use as city
+        locationType = 'city';
+        formattedLocation = locationValue;
+      } else if (parts.length === 2) {
+        // Format: "state, country" - treat as state
+        locationType = 'state';
+        formattedLocation = locationValue;
+      } else {
+        // Single part - could be country or incomplete city
+        // For safety, treat as country to avoid format errors
+        locationType = 'country';
+        formattedLocation = locationValue;
+      }
+      
+      return {
+        v: formattedLocation,
+        b: locationType,
+        s: 'i' as const
+      };
+    }).filter(item => item.v.length > 0);
     
-    let locationType: 'city' | 'state' | 'country';
-    let formattedLocation: string;
-    
-    if (parts.length >= 3) {
-      // Format: "city, state, country" - use as city
-      locationType = 'city';
-      formattedLocation = locationValue;
-    } else if (parts.length === 2) {
-      // Format: "state, country" - treat as state
-      locationType = 'state';
-      formattedLocation = locationValue;
-    } else {
-      // Single part - could be country or incomplete city
-      // For safety, treat as country to avoid format errors
-      locationType = 'country';
-      formattedLocation = locationValue;
-    }
-    
-    filters.location = [{
-      v: formattedLocation,
-      b: locationType,
-      s: 'i'
-    }];
-    
-    console.log('Location parsed:', { 
-      input: location, 
-      formatted: formattedLocation, 
-      type: locationType 
-    });
+    console.log('Locations parsed:', filters.location);
   }
 
   const payload = {
@@ -1165,12 +1167,518 @@ export const searchProspects = async (
   return data;
 };
 
+// Unlimited prospect search using Prospect List Creation API for large results
+export const searchProspectsUnlimited = async (
+  firstNames?: string[],
+  lastNames?: string[],
+  jobTitles?: string[],
+  locations?: string[],
+  size: number = 100
+): Promise<{ total: number; profiles: ProspectProfile[] }> => {
+  console.log(`🚀 Unlimited search requested for ${size} results`);
+  
+  if (size <= 30) {
+    // For small requests, use regular search
+    console.log('📌 Using regular search API (≤30 results)');
+    const results = await searchProspects(firstNames, lastNames, jobTitles, locations, size);
+    return {
+      total: results.data?.total || 0,
+      profiles: results.data?.profiles || []
+    };
+  }
+
+  // FORCE instant search for better performance - disable fallbacks temporarily
+  console.log('🚀 FORCING instant search API with smart batching');
+  try {
+    const result = await instantProspectSearch(firstNames, lastNames, jobTitles, locations, size);
+    console.log('✅ Instant search succeeded, got', result.profiles.length, 'profiles');
+    return result;
+  } catch (searchError) {
+    console.log('❌ Instant search failed with error:', searchError.message || searchError);
+    
+    // For now, fallback to regular search with the requested size
+    console.log('🔄 Fallback: Using regular search API with size', Math.min(size, 30));
+    const fallbackResults = await searchProspects(firstNames, lastNames, jobTitles, locations, Math.min(size, 30));
+    return {
+      total: fallbackResults.data?.total || 0,
+      profiles: fallbackResults.data?.profiles || []
+    };
+  }
+
+  // Last resort: Use the slow Prospect List Creation API (DISABLED for now)
+  /*
+  try {
+    console.log('Creating prospect list for unlimited results...');
+    
+    // Step 1: Create a prospect list (this bypasses the 30 limit)
+    const prospectList = await createProspectList(
+      firstNames,
+      lastNames,
+      jobTitles,
+      locations,
+      size
+    );
+    
+    const listId = prospectList.data.id;
+    console.log(`📋 Created prospect list with ID: ${listId}, max_profiles: ${size}`);
+    
+    // Step 2: Wait for the list to be processed
+    console.log('⏳ Waiting for list processing...');
+    let attempts = 0;
+    const maxAttempts = 120; // 10 minutes max wait (Wiza can take time for large lists)
+    const pollInterval = 5000; // 5 seconds
+    
+    while (attempts < maxAttempts) {
+      const status = await checkWizaListStatus(listId.toString());
+      console.log(`📊 List status: ${status.data.status}, people: ${status.data.stats?.people || 0}`);
+      
+      if (status.data.status === 'finished') {
+        // Step 3: Get the contacts from the completed list
+        try {
+          const contacts = await getWizaContacts(listId.toString());
+          console.log(`✅ Retrieved ${contacts.data.length} contacts from prospect list`);
+          
+          // Convert Wiza contacts to ProspectProfile format
+          const profiles: ProspectProfile[] = contacts.data.map((contact, index) => {
+            // Debug: Log the contact structure for first few contacts
+            if (index < 2) {
+              console.log(`🔍 Contact ${index + 1} structure:`, {
+                full_name: contact.full_name,
+                first_name: contact.first_name,
+                last_name: contact.last_name,
+                linkedin: contact.linkedin,
+                linkedin_url: (contact as any).linkedin_url,
+                profile_url: (contact as any).profile_url,
+                url: (contact as any).url,
+                keys: Object.keys(contact)
+              });
+            }
+            
+            // Debug LinkedIn URL mapping to understand which field has data
+            const linkedinUrl = (contact as any).profile_url || contact.linkedin || (contact as any).linkedin_url || (contact as any).url || '';
+            if (index < 5) {
+              console.log(`🔗 LinkedIn URL mapping for contact ${index + 1}:`, {
+                profile_url: (contact as any).profile_url,
+                linkedin: contact.linkedin,
+                linkedin_url: (contact as any).linkedin_url,
+                url: (contact as any).url,
+                final_linkedin_url: linkedinUrl
+              });
+            }
+            
+            return {
+              full_name: contact.full_name || `${contact.first_name} ${contact.last_name}`.trim(),
+              linkedin_url: linkedinUrl,
+              industry: contact.company_industry || '',
+              job_title: contact.title || '',
+              job_company_name: contact.company || '',
+              job_company_website: contact.company_domain || '',
+              location_name: contact.location || ''
+            };
+          });
+          
+          return {
+            total: status.data.stats?.people || contacts.data.length,
+            profiles: profiles
+          };
+          
+        } catch (contactError: any) {
+          if (contactError.message === 'PROFILE_FOUND_NO_CONTACTS') {
+            // No contacts found, but we know the total from the list
+            console.log('📭 List completed but no contacts to export');
+            return {
+              total: status.data.stats?.people || 0,
+              profiles: []
+            };
+          }
+          throw contactError;
+        }
+      }
+      
+      if (status.data.status === 'failed') {
+        throw new Error('Prospect list processing failed');
+      }
+      
+      // Still processing, wait and try again
+      attempts++;
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+    
+    // Timeout reached, but check if we have some completed results
+    console.log('⏰ Timeout reached, but checking for partial results...');
+    try {
+      const finalStatus = await checkWizaListStatus(listId.toString());
+      if (finalStatus.data.stats?.people && finalStatus.data.stats.people > 0) {
+        console.log(`📊 Found ${finalStatus.data.stats.people} completed prospects, retrieving them...`);
+        const contacts = await getWizaContacts(listId.toString());
+        
+        if (contacts.data && contacts.data.length > 0) {
+          const profiles: ProspectProfile[] = contacts.data.map(contact => ({
+            full_name: contact.full_name || `${contact.first_name} ${contact.last_name}`.trim(),
+            linkedin_url: (contact as any).profile_url || contact.linkedin || (contact as any).linkedin_url || (contact as any).url || '',
+            industry: contact.company_industry || '',
+            job_title: contact.title || '',
+            job_company_name: contact.company || '',
+            job_company_website: contact.company_domain || '',
+            location_name: contact.location || ''
+          }));
+          
+          console.log(`✅ Retrieved ${profiles.length} partial results before timeout`);
+          return {
+            total: finalStatus.data.stats?.people || profiles.length,
+            profiles: profiles
+          };
+        }
+      }
+    } catch (partialError) {
+      console.log('❌ Could not retrieve partial results:', partialError);
+    }
+    
+    throw new Error('Prospect list processing timeout (10 minutes) - no partial results available');
+    
+  } catch (error) {
+    console.error('❌ Unlimited search failed, trying multi-API parallel approach:', error);
+    
+    // Advanced Strategy: Multi-API parallel requests
+    try {
+      return await parallelMultiApiSearch(firstNames, lastNames, jobTitles, locations, size);
+    } catch (parallelError) {
+      console.error('❌ Parallel search also failed, falling back to regular search:', parallelError);
+      
+      // Final Fallback: Use regular search with 30 limit
+      const fallbackResults = await searchProspects(firstNames, lastNames, jobTitles, locations, 30);
+      return {
+        total: fallbackResults.data?.total || 0,
+        profiles: fallbackResults.data?.profiles || []
+      };
+    }
+  }
+  */
+};
+
+// Helper function to split array into chunks for diverse batching
+const splitArrayIntoChunks = <T>(array: T[], numChunks: number): T[][] => {
+  if (array.length === 0) return [];
+  if (numChunks <= 1) return [array];
+  
+  const chunks: T[][] = [];
+  const chunkSize = Math.ceil(array.length / numChunks);
+  
+  for (let i = 0; i < array.length; i += chunkSize) {
+    chunks.push(array.slice(i, i + chunkSize));
+  }
+  
+  // Fill remaining chunks with empty arrays if needed
+  while (chunks.length < numChunks) {
+    chunks.push([]);
+  }
+  
+  return chunks;
+};
+
+// NEW: Instant Prospect Search with Smart Batching (mimics Wiza's web interface)
+const instantProspectSearch = async (
+  firstNames?: string[],
+  lastNames?: string[],
+  jobTitles?: string[],
+  locations?: string[],
+  targetSize: number = 100
+): Promise<{ total: number; profiles: ProspectProfile[] }> => {
+  console.log(`⚡ INSTANT prospect search for ${targetSize} results - using fast search API`);
+  
+  // Strategy: Make multiple calls to the fast /api/prospects/search endpoint
+  // Each call gets 30 results instantly, combine them for larger requests
+  
+  const batchSize = 30;
+  const numBatches = Math.ceil(targetSize / batchSize);
+  const maxBatches = Math.min(numBatches, 10); // Limit to 10 batches (300 max results)
+  
+  console.log(`📊 Making ${maxBatches} instant API calls (${batchSize} results each)`);
+  
+  const allProfiles: ProspectProfile[] = [];
+  let totalCount = 0;
+  
+  // Make multiple parallel calls to get more results with DIVERSE parameters
+  const promises: Promise<ProspectSearchResponse>[] = [];
+  
+  // NEW STRATEGY: Use broad parameters for each batch to get more results
+  // Instead of splitting parameters, use variations that are more likely to yield results
+  
+  for (let i = 0; i < maxBatches; i++) {
+    // Strategy 1: Rotate through individual parameters rather than splitting
+    let batchFirstNames = firstNames;
+    let batchLastNames = lastNames;
+    let batchJobTitles = jobTitles;
+    let batchLocations = locations;
+    
+    // For batches after the first few, make parameters broader by using fewer filters
+    if (i >= 2) {
+      // Remove some filters to broaden the search
+      if (i % 2 === 0) {
+        batchFirstNames = undefined; // Remove first name filter
+      }
+      if (i % 3 === 1) {
+        batchLastNames = undefined; // Remove last name filter
+      }
+    }
+    
+    console.log(`📦 Batch ${i + 1} parameters:`, {
+      firstNames: batchFirstNames,
+      lastNames: batchLastNames, 
+      jobTitles: batchJobTitles,
+      locations: batchLocations
+    });
+    
+    const promise = searchProspects(
+      batchFirstNames,
+      batchLastNames,
+      batchJobTitles,
+      batchLocations,
+      batchSize
+    );
+    promises.push(promise);
+  }
+  
+  const results = await Promise.allSettled(promises);
+  
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled' && result.value.data?.profiles) {
+      const rawProfiles = result.value.data.profiles;
+      
+      // Debug: Log the first raw profile structure from each batch
+      if (rawProfiles.length > 0) {
+        console.log(`🔍 INSTANT SEARCH - Batch ${index + 1} RAW profile structure:`, {
+          keys: Object.keys(rawProfiles[0]),
+          linkedin_url: rawProfiles[0].linkedin_url,
+          full_name: rawProfiles[0].full_name,
+          school: rawProfiles[0].school,
+          major: rawProfiles[0].major,
+          sample_profile: rawProfiles[0]
+        });
+      }
+      
+      // Map raw profiles to ProspectProfile format
+      const mappedProfiles: ProspectProfile[] = rawProfiles.map((rawProfile: any) => {
+        // Use similar mapping as the slow search but adapted for instant search response
+        const linkedinUrl = rawProfile.linkedin_url || rawProfile.profile_url || rawProfile.linkedin || rawProfile.url || '';
+        
+        return {
+          full_name: rawProfile.full_name || `${rawProfile.first_name || ''} ${rawProfile.last_name || ''}`.trim(),
+          linkedin_url: linkedinUrl,
+          industry: rawProfile.industry || rawProfile.company_industry || '',
+          job_title: rawProfile.job_title || rawProfile.title || '',
+          job_title_role: rawProfile.job_title_role || '',
+          job_title_sub_role: rawProfile.job_title_sub_role || '',
+          job_company_name: rawProfile.job_company_name || rawProfile.company || '',
+          job_company_website: rawProfile.job_company_website || rawProfile.company_domain || '',
+          location_name: rawProfile.location_name || rawProfile.location || '',
+          school: rawProfile.school && Array.isArray(rawProfile.school) ? rawProfile.school.join(', ') : rawProfile.school || '',
+          major: rawProfile.major && Array.isArray(rawProfile.major) ? rawProfile.major.join(', ') : rawProfile.major || ''
+        };
+      });
+      
+      allProfiles.push(...mappedProfiles);
+      totalCount = Math.max(totalCount, result.value.data.total || 0);
+      console.log(`✅ Batch ${index + 1}: ${rawProfiles.length} raw profiles -> ${mappedProfiles.length} mapped profiles (${allProfiles.length} total so far)`);
+      
+    } else {
+      console.error(`❌ Batch ${index + 1} failed:`, result.status === 'rejected' ? result.reason : 'Unknown error');
+    }
+  });
+  
+  // Remove duplicates based on LinkedIn URL
+  const uniqueProfiles = allProfiles.filter((profile, index, self) => {
+    const isDuplicate = self.findIndex(p => 
+      p.linkedin_url === profile.linkedin_url || 
+      (p.full_name === profile.full_name && p.job_company_name === profile.job_company_name)
+    ) < index;
+    return !isDuplicate;
+  });
+  
+  // Limit to requested size
+  const finalProfiles = uniqueProfiles.slice(0, targetSize);
+  
+  console.log(`🎯 INSTANT search completed: ${finalProfiles.length} unique profiles in ~2-5 seconds!`);
+  
+  return {
+    total: totalCount,
+    profiles: finalProfiles
+  };
+};
+
+// Advanced Strategy: Parallel Multi-API Search to bypass limits
+const parallelMultiApiSearch = async (
+  firstNames?: string[],
+  lastNames?: string[],
+  jobTitles?: string[],
+  locations?: string[],
+  targetSize: number = 100
+): Promise<{ total: number; profiles: ProspectProfile[] }> => {
+  console.log(`🚀 Parallel Multi-API search for ${targetSize} results`);
+  
+  // Get all available API keys
+  const apiKeys = getAllApiKeys();
+  const numKeys = apiKeys.length;
+  
+  if (numKeys < 2) {
+    throw new Error('Need at least 2 API keys for parallel search');
+  }
+  
+  console.log(`🔑 Using ${numKeys} API keys in parallel`);
+  
+  // Split the target size across available API keys (each can get max 30)
+  const maxPerKey = Math.min(30, Math.ceil(targetSize / numKeys));
+  const promises: Promise<ProspectSearchResponse>[] = [];
+  
+  // Create parallel search requests using different API keys
+  // Strategy: Use all API keys with full search size to maximize unique results
+  for (let i = 0; i < numKeys; i++) {
+    const searchSize = Math.min(30, targetSize); // Each gets up to 30 results
+    
+    // Use the same search parameters but different API keys
+    // This gives us more diverse results from Wiza's algorithm
+    const promise = searchProspectsWithSpecificKey(
+      firstNames,
+      lastNames,
+      jobTitles,
+      locations,
+      searchSize,
+      apiKeys[i]
+    );
+    promises.push(promise);
+  }
+  
+  console.log(`📡 Making ${promises.length} parallel API calls with ${targetSize} target size...`);
+  
+  // Execute all searches in parallel with slight delays to reduce overlap
+  const results = await Promise.allSettled(promises);
+  
+  // Combine results from all successful calls
+  let allProfiles: ProspectProfile[] = [];
+  let totalFromAll = 0;
+  let successfulCalls = 0;
+  
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled' && result.value.data?.profiles) {
+      const profiles = result.value.data.profiles;
+      allProfiles = [...allProfiles, ...profiles];
+      totalFromAll = Math.max(totalFromAll, result.value.data.total || 0);
+      successfulCalls++;
+      console.log(`✅ API key ${index + 1}: ${profiles.length} profiles`);
+    } else {
+      console.error(`❌ API key ${index + 1} failed:`, result.status === 'rejected' ? result.reason : 'Unknown error');
+    }
+  });
+  
+  // Remove duplicates based on LinkedIn URL and full name
+  const uniqueProfiles = allProfiles.filter((profile, index, self) => {
+    const isDuplicate = self.findIndex(p => 
+      p.linkedin_url === profile.linkedin_url || 
+      (p.full_name === profile.full_name && p.job_company_name === profile.job_company_name)
+    ) < index;
+    return !isDuplicate;
+  });
+  
+  // If we still don't have enough unique results, return what we have
+  const finalProfiles = uniqueProfiles.slice(0, targetSize);
+  
+  console.log(`🎯 Combined results: ${finalProfiles.length} unique profiles from ${successfulCalls} successful calls (requested: ${targetSize})`);
+  
+  if (finalProfiles.length === 0) {
+    throw new Error('All parallel API calls failed');
+  }
+  
+  return {
+    total: totalFromAll,
+    profiles: finalProfiles
+  };
+};
+
+// Helper function to search with a specific API key
+const searchProspectsWithSpecificKey = async (
+  firstNames?: string[],
+  lastNames?: string[],
+  jobTitles?: string[],
+  locations?: string[],
+  size: number = 20,
+  apiKey: string
+): Promise<ProspectSearchResponse> => {
+  const baseUrl = process.env.WIZA_BASE_URL || 'https://wiza.co';
+
+  // Build filters object (same logic as regular search)
+  const filters: ProspectSearchFilters = {};
+
+  if (firstNames && firstNames.length > 0) {
+    filters.first_name = firstNames.map(name => name.trim()).filter(name => name.length > 0);
+  }
+
+  if (lastNames && lastNames.length > 0) {
+    filters.last_name = lastNames.map(name => name.trim()).filter(name => name.length > 0);
+  }
+
+  if (jobTitles && jobTitles.length > 0) {
+    filters.job_title = jobTitles.map(title => ({
+      v: title.trim(),
+      s: 'i' as const
+    })).filter(item => item.v.length > 0);
+  }
+
+  if (locations && locations.length > 0) {
+    filters.location = locations.map(location => {
+      const locationValue = location.trim();
+      const parts = locationValue.split(',').map(p => p.trim());
+      
+      let locationType: 'city' | 'state' | 'country';
+      let formattedLocation: string;
+      
+      if (parts.length >= 3) {
+        locationType = 'city';
+        formattedLocation = locationValue;
+      } else if (parts.length === 2) {
+        locationType = 'state';
+        formattedLocation = locationValue;
+      } else {
+        locationType = 'country';
+        formattedLocation = locationValue;
+      }
+      
+      return {
+        v: formattedLocation,
+        b: locationType,
+        s: 'i' as const
+      };
+    }).filter(item => item.v.length > 0);
+  }
+
+  const payload = {
+    size: Math.min(size, 30), // Ensure we don't exceed 30
+    filters
+  };
+
+  const response = await fetch(`${baseUrl}/api/prospects/search`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`API call failed: ${response.status} ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data;
+};
+
 // Create prospect list for contact extraction
 export const createProspectList = async (
-  firstName?: string,
-  lastName?: string,
-  jobTitle?: string,
-  location?: string,
+  firstNames?: string[],
+  lastNames?: string[],
+  jobTitles?: string[],
+  locations?: string[],
   maxProfiles: number = 20
 ): Promise<ProspectListResponse> => {
   const apiKey = getBestApiKey();
@@ -1183,58 +1691,52 @@ export const createProspectList = async (
   // Build filters object (same as search)
   const filters: ProspectSearchFilters = {};
 
-  if (firstName) {
-    filters.first_name = [firstName.trim()];
+  if (firstNames && firstNames.length > 0) {
+    filters.first_name = firstNames.map(name => name.trim()).filter(name => name.length > 0);
   }
 
-  if (lastName) {
-    filters.last_name = [lastName.trim()];
+  if (lastNames && lastNames.length > 0) {
+    filters.last_name = lastNames.map(name => name.trim()).filter(name => name.length > 0);
   }
 
-  if (jobTitle) {
-    filters.job_title = [{
-      v: jobTitle.trim(),
-      s: 'i'
-    }];
+  if (jobTitles && jobTitles.length > 0) {
+    filters.job_title = jobTitles.map(title => ({
+      v: title.trim(),
+      s: 'i' as const
+    })).filter(item => item.v.length > 0);
   }
 
-  if (location) {
-    // Parse location format and determine type (same logic as searchProspects)
-    const locationValue = location.trim();
-    const parts = locationValue.split(',').map(p => p.trim());
-    
-    let locationType: 'city' | 'state' | 'country';
-    let formattedLocation: string;
-    
-    if (parts.length >= 3) {
-      // Format: "city, state, country" - use as city
-      locationType = 'city';
-      formattedLocation = locationValue;
-    } else if (parts.length === 2) {
-      // Format: "state, country" - treat as state
-      locationType = 'state';
-      formattedLocation = locationValue;
-    } else {
-      // Single part - could be country or incomplete city
-      // For safety, treat as country to avoid format errors
-      locationType = 'country';
-      formattedLocation = locationValue;
-    }
-    
-    filters.location = [{
-      v: formattedLocation,
-      b: locationType,
-      s: 'i'
-    }];
-    
-    console.log('Prospect List - Location parsed:', { 
-      input: location, 
-      formatted: formattedLocation, 
-      type: locationType 
-    });
+  if (locations && locations.length > 0) {
+    filters.location = locations.map(location => {
+      const locationValue = location.trim();
+      const parts = locationValue.split(',').map(p => p.trim());
+      
+      let locationType: 'city' | 'state' | 'country';
+      
+      if (parts.length >= 3) {
+        locationType = 'city';
+      } else if (parts.length === 2) {
+        locationType = 'state';
+      } else {
+        locationType = 'country';
+      }
+      
+      return {
+        v: locationValue,
+        b: locationType,
+        s: 'i' as const
+      };
+    }).filter(item => item.v.length > 0);
   }
 
-  const listName = `Prospect Search - ${firstName || ''} ${lastName || ''} - ${jobTitle || ''} - ${Date.now()}`.trim();
+  const searchTerms = [
+    ...(firstNames || []),
+    ...(lastNames || []),
+    ...(jobTitles || []),
+    ...(locations || [])
+  ].slice(0, 3).join(', ');
+  
+  const listName = `Prospect Search - ${searchTerms} - ${Date.now()}`;
 
   const payload = {
     list: {

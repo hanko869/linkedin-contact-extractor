@@ -1,34 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { searchProspects } from '@/utils/wiza';
+import { searchProspects, searchProspectsUnlimited } from '@/utils/wiza';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { firstName, lastName, jobTitle, location, size = 20 } = body;
+    const { firstNames = [], lastNames = [], jobTitles = [], locations = [], size = 100 } = body;
 
-    console.log('Prospect search request:', { firstName, lastName, jobTitle, location, size });
+    console.log('Prospect search request:', { firstNames, lastNames, jobTitles, locations, size });
 
     // Validate at least one search parameter is provided
-    if (!firstName && !lastName && !jobTitle && !location) {
+    if (firstNames.length === 0 && lastNames.length === 0 && jobTitles.length === 0 && locations.length === 0) {
       return NextResponse.json({
         success: false,
-        error: 'At least one search parameter (firstName, lastName, jobTitle, or location) is required'
+        error: 'At least one search parameter (firstNames, lastNames, jobTitles, or locations) is required'
       }, { status: 400 });
     }
 
-    // Call the Wiza search function
-    const searchResults = await searchProspects(
-      firstName,
-      lastName,
-      jobTitle,
-      location,
-      Math.min(size, 30) // Max 30 as per API limits
+    // Use unlimited search for all requests (it will choose the right strategy internally)
+    const searchResults = await searchProspectsUnlimited(
+      firstNames,
+      lastNames,
+      jobTitles,
+      locations,
+      size
     );
 
     return NextResponse.json({
       success: true,
-      total: searchResults.data?.total || 0,
-      profiles: searchResults.data?.profiles || []
+      total: searchResults.total || 0,
+      profiles: searchResults.profiles || []
     });
 
   } catch (error) {
