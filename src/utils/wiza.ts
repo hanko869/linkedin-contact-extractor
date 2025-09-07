@@ -1117,8 +1117,10 @@ export const searchProspects = async (
         locationType = 'state';
         formattedLocation = locationValue;
       } else {
-        // Single part - could be country or incomplete city
-        // For safety, treat as country to avoid format errors
+        // Single part - could be a city name, state, or country
+        // For cities, Wiza API requires "city, state, country" format
+        // For states, it requires "state, country" format
+        // Single values should be treated as countries for best compatibility
         locationType = 'country';
         formattedLocation = locationValue;
       }
@@ -1173,9 +1175,10 @@ export const searchProspectsUnlimited = async (
   lastNames?: string[],
   jobTitles?: string[],
   locations?: string[],
-  size: number = 100
+  size: number = 100,
+  page: number = 1
 ): Promise<{ total: number; profiles: ProspectProfile[] }> => {
-  console.log(`🚀 Unlimited search requested for ${size} results`);
+  console.log(`🚀 Unlimited search requested for ${size} results (page ${page})`);
   
   if (size <= 30) {
     // For small requests, use regular search
@@ -1190,7 +1193,7 @@ export const searchProspectsUnlimited = async (
   // FORCE instant search for better performance - disable fallbacks temporarily
   console.log('🚀 FORCING instant search API with smart batching');
   try {
-    const result = await instantProspectSearch(firstNames, lastNames, jobTitles, locations, size);
+    const result = await instantProspectSearch(firstNames, lastNames, jobTitles, locations, size, page);
     console.log('✅ Instant search succeeded, got', result.profiles.length, 'profiles');
     return result;
   } catch (searchError) {
@@ -1382,9 +1385,10 @@ const instantProspectSearch = async (
   lastNames?: string[],
   jobTitles?: string[],
   locations?: string[],
-  targetSize: number = 100
+  targetSize: number = 100,
+  page: number = 1
 ): Promise<{ total: number; profiles: ProspectProfile[] }> => {
-  console.log(`⚡ INSTANT prospect search for ${targetSize} results - using fast search API`);
+  console.log(`⚡ INSTANT prospect search for ${targetSize} results (page ${page}) - using fast search API`);
   
   // Strategy: Make multiple calls to the fast /api/prospects/search endpoint
   // Each call gets 30 results instantly, combine them for larger requests
@@ -1401,25 +1405,61 @@ const instantProspectSearch = async (
   // Make multiple parallel calls to get more results with DIVERSE parameters
   const promises: Promise<ProspectSearchResponse>[] = [];
   
-  // NEW STRATEGY: Use broad parameters for each batch to get more results
-  // Instead of splitting parameters, use variations that are more likely to yield results
+  // PAGE-BASED STRATEGY: Different search strategies per page to maximize diversity across pages
+  // This ensures each page gets different types of results, reducing cross-page duplicates
+  const pageOffset = (page - 1) * 2; // Offset batch strategy based on page (reduced offset for 6 strategies)
   
   for (let i = 0; i < maxBatches; i++) {
-    // Strategy 1: Rotate through individual parameters rather than splitting
+    // BALANCED STRATEGY: Respect user filters but avoid overly restrictive searches
+    // Start with all filters, then use strategic combinations for diversity
     let batchFirstNames = firstNames;
     let batchLastNames = lastNames;
     let batchJobTitles = jobTitles;
     let batchLocations = locations;
     
-    // For batches after the first few, make parameters broader by using fewer filters
-    if (i >= 2) {
-      // Remove some filters to broaden the search
-      if (i % 2 === 0) {
-        batchFirstNames = undefined; // Remove first name filter
-      }
-      if (i % 3 === 1) {
-        batchLastNames = undefined; // Remove last name filter
-      }
+    // Apply different strategies per batch to balance diversity and filter respect
+    const strategyIndex = (i + pageOffset) % 6;
+    
+    // Strategy: Use smart filter combinations that respect user intent but aren't too restrictive
+    switch (strategyIndex) {
+      case 0:
+        // Use all filters - baseline (might be restrictive but respects user fully)
+        break;
+      case 1:
+        // Drop first names if user provided multiple criteria (job titles + location more important)
+        if ((firstNames && firstNames.length > 0) && (jobTitles && jobTitles.length > 0)) {
+          batchFirstNames = undefined;
+        }
+        break;
+      case 2:
+        // Drop last names if user provided multiple criteria
+        if ((lastNames && lastNames.length > 0) && (jobTitles && jobTitles.length > 0)) {
+          batchLastNames = undefined;  
+        }
+        break;
+      case 3:
+        // Keep job titles + locations (most important combo), drop names
+        if (jobTitles && jobTitles.length > 0) {
+          batchFirstNames = undefined;
+          batchLastNames = undefined;
+        }
+        break;
+      case 4:
+        // Keep first names + job titles, drop last names + locations if multiple filters
+        if ((firstNames && firstNames.length > 0) && (jobTitles && jobTitles.length > 0) && 
+            ((lastNames && lastNames.length > 0) || (locations && locations.length > 0))) {
+          batchLastNames = undefined;
+          batchLocations = undefined;
+        }
+        break;
+      case 5:
+        // Keep last names + job titles, drop first names + locations if multiple filters  
+        if ((lastNames && lastNames.length > 0) && (jobTitles && jobTitles.length > 0) &&
+            ((firstNames && firstNames.length > 0) || (locations && locations.length > 0))) {
+          batchFirstNames = undefined;
+          batchLocations = undefined;
+        }
+        break;
     }
     
     console.log(`📦 Batch ${i + 1} parameters:`, {

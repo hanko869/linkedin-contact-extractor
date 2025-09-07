@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, KeyboardEvent } from 'react';
+import { useState, KeyboardEvent, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { generateCSV, downloadCSV } from '@/utils/csv';
+import AutocompleteInput from './AutocompleteInput';
+import { locationSuggestions, jobTitleSuggestions, commonFirstNames, commonLastNames } from '@/utils/suggestions';
 
 interface ProspectProfile {
   full_name: string;
@@ -63,12 +65,34 @@ export default function ProspectSearchClient() {
   const [isExtractingProspects, setIsExtractingProspects] = useState(false);
   const [totalResults, setTotalResults] = useState(0);
   
-  // Pagination state
+  // Infinite scroll state
   const [currentPage, setCurrentPage] = useState(1);
   const [allResults, setAllResults] = useState<ProspectProfile[]>([]);
-  const [loadingPage, setLoadingPage] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const resultsPerPage = 100;
   const maxPages = 10; // Cap at 10 pages (1000 total results)
+
+  // Infinite scroll ref
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  // Infinite scroll effect
+  useEffect(() => {
+    if (!loadMoreRef.current || !hasMore || loadingMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore) {
+          loadMoreResults();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(loadMoreRef.current);
+
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore]);
 
   // Tag management functions
   const addFirstName = (name: string) => {
@@ -134,6 +158,7 @@ export default function ProspectSearchClient() {
     setAllResults([]);
     setSelectedProspects(new Set());
     setCurrentPage(1);
+    setHasMore(true);
 
     try {
       const response = await fetch('/api/prospects/search', {
@@ -175,10 +200,10 @@ export default function ProspectSearchClient() {
     }
   };
 
-  const loadNextPage = async () => {
-    if (loadingPage || currentPage >= maxPages) return;
+  const loadMoreResults = useCallback(async () => {
+    if (loadingMore || !hasMore || currentPage >= maxPages) return;
 
-    setLoadingPage(true);
+    setLoadingMore(true);
     const nextPage = currentPage + 1;
 
     try {
@@ -192,17 +217,24 @@ export default function ProspectSearchClient() {
           lastNames,
           jobTitles,
           locations,
-          size: resultsPerPage
+          size: resultsPerPage,
+          page: nextPage
         }),
       });
 
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to load next page');
+        throw new Error(data.error || 'Failed to load more results');
       }
 
       const newProfiles = data.profiles || [];
+      
+      if (newProfiles.length === 0) {
+        setHasMore(false);
+        return;
+      }
+
       // Filter out duplicates based on LinkedIn URL
       const existingUrls = new Set(allResults.map(p => p.linkedin_url));
       const uniqueNewProfiles = newProfiles.filter((p: ProspectProfile) => !existingUrls.has(p.linkedin_url));
@@ -211,14 +243,19 @@ export default function ProspectSearchClient() {
       setAllResults(updatedAllResults);
       setSearchResults(updatedAllResults);
       setCurrentPage(nextPage);
+
+      // Check if we should stop loading more
+      if (uniqueNewProfiles.length === 0 || nextPage >= maxPages) {
+        setHasMore(false);
+      }
       
     } catch (error) {
-      console.error('Load next page error:', error);
-      setSearchError(error instanceof Error ? error.message : 'Failed to load next page');
+      console.error('Load more results error:', error);
+      setSearchError(error instanceof Error ? error.message : 'Failed to load more results');
     } finally {
-      setLoadingPage(false);
+      setLoadingMore(false);
     }
-  };
+  }, [loadingMore, hasMore, currentPage, maxPages, firstNames, lastNames, jobTitles, locations, resultsPerPage, allResults]);
 
   const toggleProspectSelection = (linkedinUrl: string) => {
     const newSelected = new Set(selectedProspects);
@@ -305,14 +342,13 @@ export default function ProspectSearchClient() {
               First Names (Press Enter or comma to add)
             </label>
             <div className="mb-2">
-              <input
-                type="text"
-                value={firstNameInput}
-                onChange={(e) => setFirstNameInput(e.target.value)}
-                onKeyPress={(e) => handleKeyPress(e, addFirstName, firstNameInput)}
+              <AutocompleteInput
                 placeholder="e.g., John, Jane, Mike"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={isSearching || isExtractingProspects}
+                value={firstNameInput}
+                onChange={setFirstNameInput}
+                onKeyPress={(e) => handleKeyPress(e, addFirstName, firstNameInput)}
+                suggestions={commonFirstNames}
+                maxSuggestions={8}
               />
             </div>
             <div className="flex flex-wrap gap-1 min-h-[2rem]">
@@ -338,14 +374,13 @@ export default function ProspectSearchClient() {
               Last Names (Press Enter or comma to add)
             </label>
             <div className="mb-2">
-              <input
-                type="text"
-                value={lastNameInput}
-                onChange={(e) => setLastNameInput(e.target.value)}
-                onKeyPress={(e) => handleKeyPress(e, addLastName, lastNameInput)}
+              <AutocompleteInput
                 placeholder="e.g., Smith, Johnson, Wilson"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={isSearching || isExtractingProspects}
+                value={lastNameInput}
+                onChange={setLastNameInput}
+                onKeyPress={(e) => handleKeyPress(e, addLastName, lastNameInput)}
+                suggestions={commonLastNames}
+                maxSuggestions={8}
               />
             </div>
             <div className="flex flex-wrap gap-1 min-h-[2rem]">
@@ -371,14 +406,13 @@ export default function ProspectSearchClient() {
               Job Titles (Press Enter or comma to add)
             </label>
             <div className="mb-2">
-              <input
-                type="text"
-                value={jobTitleInput}
-                onChange={(e) => setJobTitleInput(e.target.value)}
-                onKeyPress={(e) => handleKeyPress(e, addJobTitle, jobTitleInput)}
+              <AutocompleteInput
                 placeholder="e.g., CEO, Sales Manager, Developer"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={isSearching || isExtractingProspects}
+                value={jobTitleInput}
+                onChange={setJobTitleInput}
+                onKeyPress={(e) => handleKeyPress(e, addJobTitle, jobTitleInput)}
+                suggestions={jobTitleSuggestions}
+                maxSuggestions={8}
               />
             </div>
             <div className="flex flex-wrap gap-1 min-h-[2rem]">
@@ -404,14 +438,13 @@ export default function ProspectSearchClient() {
               Locations (Press Enter or comma to add)
             </label>
             <div className="mb-2">
-              <input
-                type="text"
-                value={locationInput}
-                onChange={(e) => setLocationInput(e.target.value)}
-                onKeyPress={(e) => handleKeyPress(e, addLocation, locationInput)}
+              <AutocompleteInput
                 placeholder="e.g., New York, NY, USA"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={isSearching || isExtractingProspects}
+                value={locationInput}
+                onChange={setLocationInput}
+                onKeyPress={(e) => handleKeyPress(e, addLocation, locationInput)}
+                suggestions={locationSuggestions}
+                maxSuggestions={8}
               />
             </div>
             <div className="flex flex-wrap gap-1 min-h-[2rem]">
@@ -573,42 +606,39 @@ export default function ProspectSearchClient() {
             </table>
           </div>
           
-          {/* Pagination Controls */}
-          <div className="flex items-center justify-between mt-4 p-4 bg-gray-50 border-t">
-            <div className="text-sm text-gray-600">
+          {/* Infinite Scroll Trigger */}
+          <div className="mt-4 p-4 bg-gray-50 border-t">
+            <div className="text-sm text-gray-600 text-center">
               Showing {searchResults.length} of {totalResults.toLocaleString()} prospects
-              {currentPage > 1 && ` (Page ${currentPage} of ${Math.min(maxPages, Math.ceil(totalResults / resultsPerPage))})`}
             </div>
-            <div className="flex items-center gap-2">
-              {currentPage < maxPages && searchResults.length >= resultsPerPage * currentPage && (
-                <button
-                  onClick={loadNextPage}
-                  disabled={loadingPage}
-                  className={`px-4 py-2 rounded-md text-white font-medium transition-colors ${
-                    loadingPage
-                      ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-blue-600 hover:bg-blue-700'
-                  }`}
-                >
-                  {loadingPage ? (
-                    <span className="flex items-center">
-                      <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Loading...
-                    </span>
-                  ) : (
-                    `Load Next ${resultsPerPage} Results`
-                  )}
-                </button>
-              )}
-              {currentPage >= maxPages && (
-                <span className="text-xs text-gray-500">
-                  Maximum {maxPages} pages ({maxPages * resultsPerPage} results) reached
-                </span>
-              )}
-            </div>
+            
+            {/* Infinite scroll loading trigger */}
+            {hasMore && (
+              <div ref={loadMoreRef} className="flex items-center justify-center mt-4">
+                {loadingMore ? (
+                  <div className="flex items-center text-gray-600">
+                    <svg className="animate-spin -ml-1 mr-3 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Loading more results...
+                  </div>
+                ) : (
+                  <div className="text-gray-500 text-sm">
+                    Scroll down for more results
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {!hasMore && searchResults.length > 0 && (
+              <div className="text-center text-gray-500 text-sm mt-4">
+                {currentPage >= maxPages 
+                  ? `Maximum ${maxPages * resultsPerPage} results reached`
+                  : 'No more results available'
+                }
+              </div>
+            )}
           </div>
           
           {selectedProspects.size > 0 && (

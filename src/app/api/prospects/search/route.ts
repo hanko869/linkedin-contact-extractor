@@ -4,9 +4,9 @@ import { searchProspects, searchProspectsUnlimited } from '@/utils/wiza';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { firstNames = [], lastNames = [], jobTitles = [], locations = [], size = 100 } = body;
+    const { firstNames = [], lastNames = [], jobTitles = [], locations = [], size = 100, page = 1 } = body;
 
-    console.log('Prospect search request:', { firstNames, lastNames, jobTitles, locations, size });
+    console.log('Prospect search request:', { firstNames, lastNames, jobTitles, locations, size, page });
 
     // Validate at least one search parameter is provided
     if (firstNames.length === 0 && lastNames.length === 0 && jobTitles.length === 0 && locations.length === 0) {
@@ -22,7 +22,8 @@ export async function POST(request: NextRequest) {
       lastNames,
       jobTitles,
       locations,
-      size
+      size,
+      page
     );
 
     return NextResponse.json({
