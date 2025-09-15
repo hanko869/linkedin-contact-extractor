@@ -132,12 +132,35 @@ const ContactExtractor: React.FC = () => {
         }
       }
 
-      // Update the contacts state
-      const updatedContacts = [...contacts, ...extractedContacts];
-      setContacts(updatedContacts);
+      // Update the contacts state with proper deduplication
+      setContacts(prevContacts => {
+        const allContacts = [...prevContacts, ...extractedContacts];
+        const uniqueContacts = allContacts.filter((contact, index, self) =>
+          index === self.findIndex((c) => c.linkedinUrl === contact.linkedinUrl)
+        );
+        return uniqueContacts;
+      });
 
+      // Enhanced success messages with detailed breakdown
       if (successCount > 0) {
-        showFeedback('success', `Successfully extracted ${successCount} contacts${failedCount > 0 ? ` (${failedCount} failed)` : ''}`);
+        // Count actual phone numbers and emails
+        let totalPhoneNumbers = 0;
+        let totalEmails = 0;
+
+        extractedContacts.forEach((contact) => {
+          const phoneCount = contact.phones?.length || 0;
+          const emailCount = contact.emails?.length || 0;
+          totalPhoneNumbers += phoneCount;
+          totalEmails += emailCount;
+        });
+
+        const profilesWithContact = extractedContacts.filter(c => c.email || c.phone ||
+          (c.emails && c.emails.length > 0) || (c.phones && c.phones.length > 0)).length;
+        const profilesWithoutContact = successCount - profilesWithContact;
+
+        const successMessage = `✅ Contact Information Found:\n• Phone numbers: ${totalPhoneNumbers}\n• Email addresses: ${totalEmails}\n• Profiles with contact info: ${profilesWithContact}\n• Profiles without contact info: ${profilesWithoutContact}${failedCount > 0 ? `\n• Failed extractions: ${failedCount}` : ''}`;
+
+        showFeedback('success', successMessage);
       } else {
         showFeedback('error', 'Failed to extract any contacts');
       }
@@ -369,7 +392,7 @@ const ContactExtractor: React.FC = () => {
           }
         }
 
-        // Update the contacts state with all new contacts
+        // Update the contacts state with all new contacts and proper deduplication
         setContacts(prevContacts => {
           const allContacts = [...prevContacts, ...extractedContacts];
           const uniqueContacts = allContacts.filter((contact, index, self) =>
@@ -378,8 +401,26 @@ const ContactExtractor: React.FC = () => {
           return uniqueContacts;
         });
 
+        // Enhanced success messages with detailed breakdown
         if (successCount > 0) {
-          showFeedback('success', `✅ Successfully extracted ${successCount} contacts${failedCount > 0 ? `, ${failedCount} failed` : ''}`);
+          // Count actual phone numbers and emails from all extracted contacts
+          let totalPhoneNumbers = 0;
+          let totalEmails = 0;
+
+          extractedContacts.forEach((contact) => {
+            const phoneCount = contact.phones?.length || 0;
+            const emailCount = contact.emails?.length || 0;
+            totalPhoneNumbers += phoneCount;
+            totalEmails += emailCount;
+          });
+
+          const profilesWithContact = extractedContacts.filter(c => c.email || c.phone ||
+            (c.emails && c.emails.length > 0) || (c.phones && c.phones.length > 0)).length;
+          const profilesWithoutContact = successCount - profilesWithContact;
+
+          const successMessage = `✅ Contact Information Found:\n• Phone numbers: ${totalPhoneNumbers}\n• Email addresses: ${totalEmails}\n• Profiles with contact info: ${profilesWithContact}\n• Profiles without contact info: ${profilesWithoutContact}${failedCount > 0 ? `\n• Failed extractions: ${failedCount}` : ''}`;
+
+          showFeedback('success', successMessage);
         } else {
           showFeedback('error', `Failed to extract any contacts from ${failedCount} URLs`);
         }

@@ -20,6 +20,7 @@ components:
         full_name:
           type: string
           description: Full name of the contact. e.g. "Stephen Hakami".
+          
           example: Stephen Hakami
         company:
           type: string
