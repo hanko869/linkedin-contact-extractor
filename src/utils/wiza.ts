@@ -234,7 +234,8 @@ async function executeInParallel<T>(
           }
 
           // If the key is out of credits, mark it unhealthy and let other keys pick it up
-          if (message.includes('out of credits') || message.includes('402')) {
+          if (message.includes('out of credits') || message.includes('402') || message.includes('billing_issue')) {
+            console.log(`🔄 API key exhausted, marking as unhealthy and trying another key for ${url.substring(0, 50)}...`);
             markApiKeyFailed(keyHealth.key);
             if (getHealthyApiKeys().length > 0) {
               urlQueue.push(url);
@@ -1876,7 +1877,7 @@ export const extractContactsInParallel = async (
           error: errorText,
           apiKeyIndex: 'hidden'
         });
-        if (errorText.includes('credits') || errorText.includes('quota')) {
+        if (errorText.includes('credits') || errorText.includes('quota') || errorText.includes('billing')) {
           throw new Error(`API key out of credits`);
         }
         throw new Error(`Failed to create reveal: ${response.status} - ${errorText.substring(0, 100)}`);
@@ -2099,14 +2100,11 @@ export const extractContactsInParallel = async (
                 error: 'LinkedIn profile is private and cannot be accessed.'
               };
             } else if (failError === 'billing_issue' && !hasContactData) {
-              console.error('Wiza API returned billing_issue with no data. This could mean:');
+              console.error('Wiza API returned billing_issue with no data - triggering failover');
               console.error('1. Your Wiza account is on a limited plan');
               console.error('2. This specific profile requires a higher-tier Wiza plan');
               console.error('3. You\'ve hit a rate limit');
-              return {
-                success: false,
-                error: 'Wiza API limitation: This profile cannot be extracted with your current Wiza plan.'
-              };
+              throw new Error('API key out of credits');
             } else if (!hasContactData) {
               return {
                 success: false,
