@@ -90,7 +90,6 @@ const ContactExtractor: React.FC = () => {
               const r = data.results[0];
               if (r?.success && r?.contact) {
                 extractedContacts.push(r.contact as Contact);
-                saveContact(r.contact as Contact);
                 successCount++;
               } else {
                 failedCount++;
@@ -120,7 +119,6 @@ const ContactExtractor: React.FC = () => {
           for (const item of data.results as Array<{ url: string; success: boolean; contact?: Contact }>) {
             if (item.success && item.contact) {
               extractedContacts.push(item.contact);
-              saveContact(item.contact);
               successCount++;
             } else {
               failedCount++;
@@ -132,14 +130,11 @@ const ContactExtractor: React.FC = () => {
         }
       }
 
-      // Update the contacts state with proper deduplication
-      setContacts(prevContacts => {
-        const allContacts = [...prevContacts, ...extractedContacts];
-        const uniqueContacts = allContacts.filter((contact, index, self) =>
-          index === self.findIndex((c) => c.linkedinUrl === contact.linkedinUrl)
-        );
-        return uniqueContacts;
-      });
+      // Update UI state with new contacts - simple append as per guide
+      setContacts(prevContacts => [...extractedContacts, ...prevContacts]);
+
+      // Batch save all extracted contacts to localStorage
+      extractedContacts.forEach(contact => saveContact(contact));
 
       // Enhanced success messages with detailed breakdown
       if (successCount > 0) {
@@ -351,7 +346,6 @@ const ContactExtractor: React.FC = () => {
                 const r = data.results[0];
                 if (r?.success && r?.contact) {
                   extractedContacts.push(r.contact as Contact);
-                  saveContact(r.contact as Contact);
                   successCount++;
                 } else {
                   failedCount++;
@@ -380,7 +374,6 @@ const ContactExtractor: React.FC = () => {
             for (const item of data.results as Array<{ url: string; success: boolean; contact?: Contact }>) {
               if (item.success && item.contact) {
                 extractedContacts.push(item.contact);
-                saveContact(item.contact);
                 successCount++;
               } else {
                 failedCount++;
@@ -392,14 +385,11 @@ const ContactExtractor: React.FC = () => {
           }
         }
 
-        // Update the contacts state with all new contacts and proper deduplication
-        setContacts(prevContacts => {
-          const allContacts = [...prevContacts, ...extractedContacts];
-          const uniqueContacts = allContacts.filter((contact, index, self) =>
-            index === self.findIndex((c) => c.linkedinUrl === contact.linkedinUrl)
-          );
-          return uniqueContacts;
-        });
+        // Update UI state with new contacts - simple append as per guide
+        setContacts(prevContacts => [...extractedContacts, ...prevContacts]);
+
+        // Batch save all extracted contacts to localStorage
+        extractedContacts.forEach(contact => saveContact(contact));
 
         // Enhanced success messages with detailed breakdown
         if (successCount > 0) {
