@@ -1871,10 +1871,15 @@ export const extractContactsInParallel = async (
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.error(`❌ Individual reveal creation failed for ${linkedinUrl}:`, {
+          status: response.status,
+          error: errorText,
+          apiKeyIndex: 'hidden'
+        });
         if (errorText.includes('credits') || errorText.includes('quota')) {
           throw new Error(`API key out of credits`);
         }
-        throw new Error(`Failed to create reveal: ${response.status}`);
+        throw new Error(`Failed to create reveal: ${response.status} - ${errorText.substring(0, 100)}`);
       }
 
       const revealResponse = await response.json();
@@ -1901,11 +1906,11 @@ export const extractContactsInParallel = async (
           if (statusData.data?.status === 'finished') {
             // The contact data is directly in statusData.data, not statusData.data.contact
             const contact = statusData.data;
-            
-            // Log the response for debugging
-            // Removed detailed logging for privacy
-            
+
+            console.log(`✅ Reveal completed for URL: ${linkedinUrl.substring(0, 50)}...`);
+
             if (!contact || !contact.name) {
+              console.error(`❌ No contact data in response for ${linkedinUrl}`);
               return {
                 success: false,
                 error: 'No contact data in response'
@@ -1990,10 +1995,130 @@ export const extractContactsInParallel = async (
               contact: extractedContact
             };
           } else if (statusData.data?.status === 'failed') {
-            return {
-              success: false,
-              error: 'Reveal failed: ' + (statusData.data?.error || 'Unknown error')
-            };
+            const failError = statusData.data?.fail_error || statusData.data?.error || 'Unknown error';
+            console.error(`❌ Reveal failed for ${linkedinUrl}: ${failError}`);
+
+            // IMPORTANT: Check if we actually have contact data despite the "failed" status
+            // Wiza sometimes returns data even with billing_issue status
+            const hasContactData = statusData.data?.email || statusData.data?.phone_number ||
+                                 statusData.data?.mobile_phone || statusData.data?.name ||
+                                 statusData.data?.full_name;
+
+            if (failError === 'billing_issue' && hasContactData) {
+              // Silently proceed - billing_issue with data is common and not a real error
+              // DO NOT throw error - continue processing the data below
+              console.log(`✅ Billing issue but has data, proceeding with extraction for ${linkedinUrl.substring(0, 50)}...`);
+
+              // Extract contact information despite billing_issue status
+              const contact = statusData.data;
+
+              const extractedContact: Contact = {
+                id: generateContactId(),
+                linkedinUrl: linkedinUrl,
+                name: contact.full_name || contact.name || 'Unknown',
+                jobTitle: contact.title || contact.job_title || contact.headline || contact.position || '',
+                company: contact.company || contact.job_company_name || contact.organization || '',
+                location: contact.location || '',
+                email: '',
+                emails: [],
+                phone: '',
+                phones: [],
+                extractedAt: new Date().toISOString()
+              };
+
+              // Extract emails - handle both individual fields and arrays
+              const emailFields = [
+                contact.email,
+                contact.work_email,
+                contact.personal_email,
+                contact.likely_email
+              ];
+
+              // Add individual email fields first
+              for (const email of emailFields) {
+                if (email && typeof email === 'string' && extractedContact.emails && !extractedContact.emails.includes(email)) {
+                  extractedContact.emails.push(email);
+                }
+              }
+
+              // Also handle emails array if it exists
+              if (contact.emails && Array.isArray(contact.emails)) {
+                for (const emailItem of contact.emails) {
+                  const emailValue = typeof emailItem === 'string' ? emailItem : emailItem?.email;
+                  if (emailValue && !extractedContact.emails?.includes(emailValue)) {
+                    extractedContact.emails?.push(emailValue);
+                  }
+                }
+              }
+
+              if (extractedContact.emails && extractedContact.emails.length > 0) {
+                extractedContact.email = extractedContact.emails[0];
+              }
+
+              // Extract phones - handle both individual fields and arrays
+              const phoneFields = [
+                contact.phone_number,
+                contact.phone,
+                contact.mobile_phone,
+                contact.work_phone
+              ];
+
+              // Add individual phone fields first
+              for (const phone of phoneFields) {
+                if (phone && typeof phone === 'string' && extractedContact.phones && !extractedContact.phones.includes(phone)) {
+                  extractedContact.phones.push(phone);
+                }
+              }
+
+              // Also handle phones array if it exists
+              if (contact.phones && Array.isArray(contact.phones)) {
+                for (const phoneItem of contact.phones) {
+                  const phoneValue = typeof phoneItem === 'string' ? phoneItem : phoneItem?.number;
+                  if (phoneValue && !extractedContact.phones?.includes(phoneValue)) {
+                    extractedContact.phones?.push(phoneValue);
+                  }
+                }
+              }
+
+              if (extractedContact.phones && extractedContact.phones.length > 0) {
+                extractedContact.phone = extractedContact.phones[0];
+              }
+
+              return {
+                success: true,
+                contact: extractedContact
+              };
+            } else if (failError === 'profile_not_found') {
+              return {
+                success: false,
+                error: 'LinkedIn profile not found. Please check the URL is correct.'
+              };
+            } else if (failError === 'profile_private') {
+              return {
+                success: false,
+                error: 'LinkedIn profile is private and cannot be accessed.'
+              };
+            } else if (failError === 'billing_issue' && !hasContactData) {
+              console.error('Wiza API returned billing_issue with no data. This could mean:');
+              console.error('1. Your Wiza account is on a limited plan');
+              console.error('2. This specific profile requires a higher-tier Wiza plan');
+              console.error('3. You\'ve hit a rate limit');
+              return {
+                success: false,
+                error: 'Wiza API limitation: This profile cannot be extracted with your current Wiza plan.'
+              };
+            } else if (!hasContactData) {
+              return {
+                success: false,
+                error: 'Reveal failed: ' + failError
+              };
+            } else {
+              console.warn(`Reveal marked as failed with ${failError} but has data - continuing`);
+              // Continue processing the data below by falling through
+            }
+          } else {
+            // Still processing - log status for debugging
+            console.log(`⏳ Reveal in progress for ${linkedinUrl.substring(0, 50)}...: ${statusData.data?.status || 'unknown'}`);
           }
         }
 
@@ -2004,6 +2129,7 @@ export const extractContactsInParallel = async (
         }
       }
 
+      console.error(`⏰ Extraction timed out for ${linkedinUrl} after 3 minutes`);
       return {
         success: false,
         error: 'Extraction timed out'
