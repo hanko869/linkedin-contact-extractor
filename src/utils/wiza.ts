@@ -32,8 +32,9 @@ interface ApiKeyHealth {
 // Track health status of each API key
 const apiKeyHealthMap: Map<string, ApiKeyHealth> = new Map();
 
-// Per-key concurrency and rate limit handling
-const CONCURRENCY_PER_KEY: number = Number(process.env.WIZA_CONCURRENCY_PER_KEY || '2');
+// Fast concurrent extraction configuration - support up to 20 API keys
+const baseMultiplier = 10;  // 10 requests per API key (from guide)
+const maxConcurrent = 200;  // Maximum 200 concurrent requests (20 keys × 10)
 const RATE_LIMIT_COOLDOWN_MS: number = Number(process.env.WIZA_RATE_LIMIT_COOLDOWN_MS || '10000');
 const keyCooldownUntil: Map<string, number> = new Map();
 
@@ -175,7 +176,7 @@ async function executeWithFailover<T>(
   throw lastError || new Error(`All API keys failed for ${operationName}`);
 }
 
-// Execute operations in parallel with multiple API keys
+// Fast concurrent extraction with direct parallel processing (from guide)
 async function executeInParallel<T>(
   linkedinUrls: string[],
   operation: (url: string, apiKey: string) => Promise<T>,
@@ -183,90 +184,108 @@ async function executeInParallel<T>(
 ): Promise<Map<string, T>> {
   const results = new Map<string, T>();
   const healthyKeys = getHealthyApiKeys();
-  
+
   if (healthyKeys.length === 0) {
     throw new Error('No healthy API keys available');
   }
 
-  const urlQueue = [...linkedinUrls];
-  const processingPromises: Promise<void>[] = [];
+  // Calculate optimal concurrency based on available keys
+  const availableKeys = healthyKeys.length;
+  const optimalConcurrency = Math.min(availableKeys * baseMultiplier, maxConcurrent);
+
+  console.log(`🚀 Starting fast concurrent extraction with ${availableKeys} API keys, ${optimalConcurrency} max concurrent requests`);
+
   let completedCount = 0;
   const totalCount = linkedinUrls.length;
 
-  // Process URLs with each healthy API key, allowing multiple workers per key
-  for (const keyHealth of healthyKeys) {
-    const spawnWorkers = Math.max(1, CONCURRENCY_PER_KEY);
+  // Direct parallel processing - create all promises upfront
+  const extractionPromises = linkedinUrls.map(async (url, index) => {
+    // Distribute URLs across available API keys round-robin style
+    const keyIndex = index % availableKeys;
+    const selectedKey = healthyKeys[keyIndex];
 
-    const processWithKey = async () => {
-      while (true) {
-        // Respect cooldown for this key if we recently hit a rate limit
-        const cooldownUntil = keyCooldownUntil.get(keyHealth.key) || 0;
-        const now = Date.now();
-        if (cooldownUntil > now) {
-          await new Promise(resolve => setTimeout(resolve, Math.min(1000, cooldownUntil - now)));
-          continue;
-        }
+    // Add small delay to prevent thundering herd (stagger requests)
+    const delay = Math.floor(index / availableKeys) * 100; // 100ms between batches
+    if (delay > 0) {
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
 
-        const url = urlQueue.shift();
-        if (!url) break;
+    try {
+      const result = await operation(url, selectedKey.key);
+      markApiKeySuccess(selectedKey.key);
+
+      // Update progress atomically
+      completedCount++;
+      if (onProgress && completedCount % 5 === 0) { // Update every 5 completions for performance
+        onProgress(completedCount, totalCount);
+      }
+
+      return { url, result, success: true };
+    } catch (error: any) {
+      const message: string = (error?.message || '').toString();
+      console.error(`Fast extraction failed for ${url}:`, message);
+
+      // Handle rate limiting with exponential backoff
+      if (message.includes('429') || message.toLowerCase().includes('rate limit')) {
+        keyCooldownUntil.set(selectedKey.key, Date.now() + RATE_LIMIT_COOLDOWN_MS);
+        // Retry with different key
+        const retryKeyIndex = (keyIndex + 1) % availableKeys;
+        const retryKey = healthyKeys[retryKeyIndex];
 
         try {
-          // Don't log which API key is being used for security
-          const result = await operation(url, keyHealth.key);
-          results.set(url, result);
-          markApiKeySuccess(keyHealth.key);
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
+          const retryResult = await operation(url, retryKey.key);
+          markApiKeySuccess(retryKey.key);
 
-          // Update progress
           completedCount++;
-          if (onProgress) {
+          if (onProgress && completedCount % 5 === 0) {
             onProgress(completedCount, totalCount);
           }
-        } catch (error: any) {
-          const message: string = (error?.message || '').toString();
-          console.error(`Failed to process ${url}:`, message);
 
-          // Handle explicit rate limiting without marking the key unhealthy
-          if (message.includes('429') || message.toLowerCase().includes('rate limit')) {
-            keyCooldownUntil.set(keyHealth.key, Date.now() + RATE_LIMIT_COOLDOWN_MS);
-            // Re-queue for later attempt
-            urlQueue.push(url);
-            continue;
-          }
-
-          // If the key is out of credits, mark it unhealthy and let other keys pick it up
-          if (message.includes('out of credits') || message.includes('402') || message.includes('billing_issue')) {
-            console.log(`🔄 API key exhausted, marking as unhealthy and trying another key for ${url.substring(0, 50)}...`);
-            markApiKeyFailed(keyHealth.key);
-            if (getHealthyApiKeys().length > 0) {
-              urlQueue.push(url);
-              continue;
-            }
-          }
-
-          // For other transient errors, re-queue so another key or later retry can handle it
-          if (getHealthyApiKeys().length > 0) {
-            urlQueue.push(url);
-            continue;
-          }
-
-          // No healthy keys left: count as completed (failed) and move on without aborting all
+          return { url, result: retryResult, success: true };
+        } catch (retryError) {
+          console.error(`Retry failed for ${url}:`, retryError);
+          markApiKeyFailed(selectedKey.key);
           completedCount++;
-          if (onProgress) {
+          if (onProgress && completedCount % 5 === 0) {
             onProgress(completedCount, totalCount);
           }
-          // Do not throw here to avoid aborting the whole batch
+          return { url, result: null, success: false, error: retryError };
         }
       }
-    };
 
-    for (let i = 0; i < spawnWorkers; i++) {
-      processingPromises.push(processWithKey());
+      // Handle billing issues by marking key as exhausted
+      if (message.includes('out of credits') || message.includes('402') || message.includes('billing_issue')) {
+        console.log(`🔄 API key exhausted, marking as failed for fast extraction: ${url.substring(0, 50)}...`);
+        markApiKeyFailed(selectedKey.key);
+      }
+
+      completedCount++;
+      if (onProgress && completedCount % 5 === 0) {
+        onProgress(completedCount, totalCount);
+      }
+
+      return { url, result: null, success: false, error };
+    }
+  });
+
+  // Execute all extractions concurrently with throttling
+  console.log(`⚡ Processing ${linkedinUrls.length} URLs with ${optimalConcurrency} concurrent requests`);
+  const batchResults = await Promise.all(extractionPromises);
+
+  // Process results
+  for (const batchResult of batchResults) {
+    if (batchResult.success && batchResult.result) {
+      results.set(batchResult.url, batchResult.result);
     }
   }
 
-  // Wait for all parallel operations to complete
-  await Promise.all(processingPromises);
-  
+  // Final progress update
+  if (onProgress) {
+    onProgress(totalCount, totalCount);
+  }
+
+  console.log(`✅ Fast concurrent extraction completed: ${results.size}/${totalCount} successful`);
   return results;
 }
 
@@ -2005,6 +2024,15 @@ export const extractContactsInParallel = async (
                                  statusData.data?.mobile_phone || statusData.data?.name ||
                                  statusData.data?.full_name;
 
+            console.log(`🔍 Debug billing_issue for ${linkedinUrl.substring(0, 50)}:`, {
+              failError,
+              hasContactData,
+              hasEmail: !!statusData.data?.email,
+              hasPhone: !!statusData.data?.phone_number,
+              hasName: !!statusData.data?.name,
+              hasFullName: !!statusData.data?.full_name
+            });
+
             if (failError === 'billing_issue' && hasContactData) {
               // Silently proceed - billing_issue with data is common and not a real error
               // DO NOT throw error - continue processing the data below
@@ -2100,7 +2128,7 @@ export const extractContactsInParallel = async (
                 error: 'LinkedIn profile is private and cannot be accessed.'
               };
             } else if (failError === 'billing_issue' && !hasContactData) {
-              console.error('Wiza API returned billing_issue with no data - triggering failover');
+              console.error(`🚨 THROWING EXCEPTION: billing_issue with no data for ${linkedinUrl.substring(0, 50)}`);
               console.error('1. Your Wiza account is on a limited plan');
               console.error('2. This specific profile requires a higher-tier Wiza plan');
               console.error('3. You\'ve hit a rate limit');
